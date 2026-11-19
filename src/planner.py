@@ -48,6 +48,8 @@ REQUIREMENTS:
      * testimonials: 'grid' | 'spotlight'
    - color_scheme: background (hex), primary_color (hex), text_color (hex)
 
+3. CRITICAL: Do NOT include any star emojis or symbols (e.g. ⭐, ★, ✨, 🌟, ☆, 💫, 🌠) in the suggested website title, brand name, brand_icon, or any section headings.
+
 You must output ONLY valid JSON matching this schema:
 {{
   "business_type": "<e.g., Luxury Interior Design Studio, Enterprise Cloud Security SaaS, Artisan Sourdough Bakery>",
@@ -263,7 +265,7 @@ def create_generic_fallback_plan(brief: str) -> WebsitePlan:
         typography="Inter, sans-serif",
         heading_font="Inter, sans-serif",
         background_style="solid",
-        brand_icon="✨",
+        brand_icon="🏢",
         form_type="contact",
         form_fields=["Full Name", "Email Address", "Phone Number", "Service Needed", "Message"],
         layout_preferences={

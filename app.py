@@ -3,6 +3,9 @@ SitePilot AI — Agentic No-Code Website Builder
 Phase 3: Predefined HTML/CSS Renderer & Live Streamlit Preview
 """
 
+import copy
+import html
+import json
 import streamlit as st
 import streamlit.components.v1 as components
 from src.config import get_llm_config, SUPPORTED_PROVIDERS
@@ -10,6 +13,9 @@ from src.providers.factory import get_provider
 from src.planner import plan_website
 from src.generator import generate_website_json, WebsiteGenerationError
 from src.renderer import render_website
+from src.editor import plan_edits
+from src.patch_engine import apply_patches, restore_version
+from src.preview_server import update_preview_html, get_preview_url
 
 # Set Streamlit page configuration
 st.set_page_config(
@@ -28,6 +34,14 @@ if "generation_meta" not in st.session_state:
     st.session_state["generation_meta"] = None
 if "last_error" not in st.session_state:
     st.session_state["last_error"] = None
+if "edit_history" not in st.session_state:
+    st.session_state["edit_history"] = []
+if "version_snapshots" not in st.session_state:
+    st.session_state["version_snapshots"] = {}
+if "edit_last_msg" not in st.session_state:
+    st.session_state["edit_last_msg"] = None
+if "edit_last_error" not in st.session_state:
+    st.session_state["edit_last_error"] = None
 
 # Custom styling
 st.markdown(
@@ -171,6 +185,8 @@ with col_left:
                     state, meta = generate_website_json(brief_text, plan, provider=provider)
                     st.session_state["website_state"] = state
                     st.session_state["generation_meta"] = meta
+                    st.session_state["version_snapshots"] = {state.version: copy.deepcopy(state)}
+                    st.session_state["edit_history"] = []
 
                     # Step 3: Validation
                     st.write(f"✅ **Step 3/3: Validated schema (Pydantic). Version: v{state.version}**")
@@ -196,26 +212,225 @@ with col_left:
 
     st.markdown("---")
 
-    # Placeholder for Phase 4 Edit Agent
+    # Phase 4 Conversational Edit Agent & Deterministic Patch Engine
     st.subheader("2. Conversational Edit")
-    st.text_input(
-        "Request a change (e.g., 'Make the hero darker' or 'Change CTA to Book a Trial'):",
-        disabled=True,
-        help="Will be enabled in Phase 4 (Conversational Edit Agent & Patch Engine).",
-    )
-    col_edit_btn, col_edit_badge = st.columns([1, 2])
-    with col_edit_btn:
-        st.button("💬 Apply Edit", disabled=True)
-    with col_edit_badge:
-        st.markdown(
-            '<span class="status-badge badge-pending">Phase 4: Edit Agent</span> Coming next',
-            unsafe_allow_html=True,
-        )
+    active_state = st.session_state.get("website_state")
 
-    with st.expander("📜 Edit History & Version Log", expanded=False):
+    if not active_state:
+        st.text_input(
+            "Request a change (e.g., 'Make the hero darker' or 'Change CTA to Book a Trial'):",
+            disabled=True,
+            help="Generate a website above first to enable conversational editing.",
+            key="edit_prompt_disabled",
+        )
+        st.button("💬 Apply Edit", disabled=True, use_container_width=True)
+        st.caption("ℹ️ Conversational editing will be enabled once a website is generated.")
+    else:
+        with st.form(key="conversational_edit_form", clear_on_submit=True):
+            edit_text = st.text_input(
+                "Request a change to the website:",
+                placeholder="e.g. 'Make the hero darker', 'Change CTA to Book a Trial', 'Add a testimonials section'",
+                help="Natural language instruction targeting section content, styles, ordering, or theme.",
+            )
+            col_apply, col_status = st.columns([1, 1])
+            with col_apply:
+                apply_submitted = st.form_submit_button("💬 Apply Edit", type="primary", use_container_width=True)
+            with col_status:
+                st.markdown(
+                    f'<div style="padding-top: 6px;"><span class="status-badge badge-active">Target: v{active_state.version}</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+        if apply_submitted:
+            if not edit_text or not edit_text.strip():
+                st.warning("Please enter a specific edit instruction.")
+            else:
+                current_provider = get_provider(selected_provider)
+                with st.status(f"Applying Edit to v{active_state.version}...", expanded=True) as edit_status:
+                    try:
+                        edit_status.write("1. Parsing natural language instruction into structured patch operations...")
+                        plan = plan_edits(edit_text.strip(), active_state, provider=current_provider)
+                        edit_status.write(f"2. Generated plan: {plan.summary} ({len(plan.operations)} operations)")
+
+                        edit_status.write("3. Applying deterministic patches and validating state schema...")
+                        new_state, success, msg, hist_item = apply_patches(
+                            active_state,
+                            plan.operations,
+                            instruction=edit_text.strip(),
+                            summary=plan.summary,
+                        )
+
+                        if success and new_state:
+                            st.session_state["website_state"] = new_state
+                            st.session_state["version_snapshots"][new_state.version] = copy.deepcopy(new_state)
+                            if hist_item:
+                                st.session_state["edit_history"].append(hist_item)
+                            st.session_state["edit_last_msg"] = f"Applied edit (v{new_state.version}): {plan.summary}"
+                            st.session_state["edit_last_error"] = None
+                            edit_status.update(label="Edit Applied Successfully!", state="complete", expanded=False)
+                            st.rerun()
+                        else:
+                            if hist_item:
+                                st.session_state["edit_history"].append(hist_item)
+                            st.session_state["edit_last_error"] = f"Patch application failed: {msg}"
+                            st.session_state["edit_last_msg"] = None
+                            edit_status.update(label="Patch Application Failed", state="error", expanded=True)
+                            st.error(f"Patch Error: {msg}")
+
+                    except Exception as e:
+                        st.session_state["edit_last_error"] = str(e)
+                        st.session_state["edit_last_msg"] = None
+                        edit_status.update(label="Edit Failed", state="error", expanded=True)
+                        st.error(f"Edit Agent Error: {str(e)}")
+
+        if st.session_state.get("edit_last_msg"):
+            st.success(f"✨ {st.session_state['edit_last_msg']}")
+        if st.session_state.get("edit_last_error"):
+            st.error(f"⚠️ {st.session_state['edit_last_error']}")
+
+        # ---------------------------------------------------------------------
+        # Version Restoration & Undo Controls
+        # ---------------------------------------------------------------------
+        snapshots = st.session_state.get("version_snapshots", {})
+        current_v = active_state.version
+
+        # 1. Quick Undo Last Edit (Revert to previous version)
+        prev_versions = [ver for ver in snapshots.keys() if ver < current_v]
+        if prev_versions:
+            prev_v = max(prev_versions)
+            with st.expander(f"⏮️ Undo Last Edit (Revert to v{prev_v})", expanded=False):
+                st.markdown(
+                    f"Revert current website state (`v{current_v}`) back to **Version v{prev_v}**.<br>"
+                    f"<small style='color: #64748B;'>Restoring commits the previous state as a new version <b>v{current_v + 1}</b> without overwriting historical versions.</small>",
+                    unsafe_allow_html=True,
+                )
+                confirm_undo = st.checkbox(
+                    f"Confirm: Revert to v{prev_v} as new version v{current_v + 1}?",
+                    key=f"confirm_undo_{current_v}",
+                )
+                if st.button("⏮️ Confirm & Revert State", type="secondary", disabled=not confirm_undo, use_container_width=True):
+                    target_snap = snapshots[prev_v]
+                    restored_state, ok, r_msg, r_hist = restore_version(
+                        target_snap,
+                        active_state,
+                        instruction=f"Undo last edit (reverted state from v{current_v} to v{prev_v})",
+                    )
+                    if ok:
+                        st.session_state["website_state"] = restored_state
+                        st.session_state["version_snapshots"][restored_state.version] = copy.deepcopy(restored_state)
+                        st.session_state["edit_history"].append(r_hist)
+                        st.session_state["edit_last_msg"] = r_msg
+                        st.session_state["edit_last_error"] = None
+                        st.rerun()
+                    else:
+                        st.error(r_msg)
+
+        # 2. Restore Specific Previous Version
+        other_versions = sorted([ver for ver in snapshots.keys() if ver != current_v])
+        if other_versions:
+            with st.expander("🔄 Restore Specific Version", expanded=False):
+                st.markdown("Select an earlier version snapshot to restore as a brand new version:")
+                selected_v = st.selectbox(
+                    "Select Version to Restore:",
+                    options=other_versions,
+                    format_func=lambda x: f"Version v{x}",
+                    key="restore_version_select_box",
+                )
+                st.caption(f"Restoring **v{selected_v}** will validate and commit it as **v{current_v + 1}**, preserving all history.")
+                confirm_restore = st.checkbox(
+                    f"Confirm: Restore version v{selected_v} as new version v{current_v + 1}?",
+                    key=f"confirm_restore_{selected_v}",
+                )
+                if st.button(f"🔄 Confirm Restore v{selected_v} as v{current_v + 1}", type="primary", disabled=not confirm_restore, use_container_width=True):
+                    target_snap = snapshots[selected_v]
+                    restored_state, ok, r_msg, r_hist = restore_version(
+                        target_snap,
+                        active_state,
+                        instruction=f"Restore historical version v{selected_v}",
+                    )
+                    if ok:
+                        st.session_state["website_state"] = restored_state
+                        st.session_state["version_snapshots"][restored_state.version] = copy.deepcopy(restored_state)
+                        st.session_state["edit_history"].append(r_hist)
+                        st.session_state["edit_last_msg"] = r_msg
+                        st.session_state["edit_last_error"] = None
+                        st.rerun()
+                    else:
+                        st.error(r_msg)
+
+    # -------------------------------------------------------------------------
+    # Detailed Edit History & Version Audit Log
+    # -------------------------------------------------------------------------
+    with st.expander("📜 Edit History & Version Audit Log", expanded=False):
         curr_state = st.session_state.get("website_state")
         v = curr_state.version if curr_state else 0
-        st.info(f"Current Version: v{v} (Initial state created upon generation)")
+        st.markdown(f"**Current State Version:** `v{v}` &bull; **Saved Snapshots:** `{len(st.session_state.get('version_snapshots', {}))}`")
+        history = st.session_state.get("edit_history") or []
+        if history:
+            st.markdown("##### Consecutive Edit Timeline")
+            for h in reversed(history):
+                is_success = getattr(h, "success", True)
+                status_color = "#03543F" if is_success else "#991B1B"
+                status_bg = "#DEF7EC" if is_success else "#FEE2E2"
+                status_label = "Applied Successfully" if is_success else "Rejected / Rolled Back"
+
+                v_before = getattr(h, "version_before", v)
+                v_after = getattr(h, "version", v)
+                h_instr = html.escape(getattr(h, "instruction", "") or "")
+                h_sum = html.escape(getattr(h, "summary", "") or "")
+                h_time = getattr(h, "timestamp", "") or ""
+                records = getattr(h, "operation_records", []) or []
+
+                st.markdown(
+                    f"""
+                    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: #64748B;">
+                            <span><b>v{v_before} &rarr; v{v_after}</b> &bull; {h_time}</span>
+                            <span style="background: {status_bg}; color: {status_color}; padding: 2px 8px; border-radius: 12px; font-weight: 600; font-size: 0.75rem;">
+                                {status_label}
+                            </span>
+                        </div>
+                        <div style="font-weight: 600; color: #0F172A; margin: 6px 0 2px 0;">&ldquo;{h_instr}&rdquo;</div>
+                        <div style="font-size: 0.85rem; color: #475569;">{h_sum}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Expandable operation breakdown for this history item
+                if records:
+                    with st.expander(f"🔍 Operation Details (v{v_before} → v{v_after})", expanded=False):
+                        for idx, rec in enumerate(records, 1):
+                            r_op = getattr(rec, "op", "operation")
+                            r_tgt = getattr(rec, "target_id", None) or "-"
+                            r_prop = getattr(rec, "property_path", None) or "-"
+                            r_stat = getattr(rec, "status", "success")
+                            r_det = getattr(rec, "details", "") or ""
+
+                            st.markdown(f"**Operation #{idx}: `{r_op}`** (Target: `{r_tgt}`, Property: `{r_prop}`, Status: `{r_stat}`)")
+                            if r_det:
+                                st.caption(r_det)
+
+                            col_bef, col_aft = st.columns(2)
+                            with col_bef:
+                                st.markdown("<small style='font-weight:600; color:#64748B;'>Before Value:</small>", unsafe_allow_html=True)
+                                prev_v = getattr(rec, "previous_value", None)
+                                if isinstance(prev_v, (dict, list)):
+                                    st.json(prev_v)
+                                else:
+                                    st.code(str(prev_v) if prev_v is not None else "None")
+                            with col_aft:
+                                st.markdown("<small style='font-weight:600; color:#64748B;'>After Value:</small>", unsafe_allow_html=True)
+                                new_v = getattr(rec, "new_value", None)
+                                if isinstance(new_v, (dict, list)):
+                                    st.json(new_v)
+                                else:
+                                    st.code(str(new_v) if new_v is not None else "None")
+                            st.markdown("---")
+                elif getattr(h, "error", None):
+                    st.caption(f"Error details: {h.error}")
+        else:
+            st.caption("No edits applied yet. Initial state generated at v1.")
 
 with col_right:
     st.subheader("3. Live Website Preview")
@@ -224,6 +439,12 @@ with col_right:
     if current_state:
         # Top banner with Title and Section Badges
         col_hdr1, col_hdr2 = st.columns([2, 1])
+        # Render HTML and sync with background preview server
+        rendered_html = render_website(current_state)
+        preview_url = update_preview_html(rendered_html)
+
+        # Top banner with Title, Version Badge, and Open in Browser button
+        col_hdr1, col_hdr2, col_hdr3 = st.columns([2, 1, 1])
         with col_hdr1:
             st.markdown(f"### {current_state.title}")
         with col_hdr2:
@@ -231,6 +452,14 @@ with col_right:
                 f'<div style="text-align: right;"><span class="status-badge badge-active">Version v{current_state.version}</span></div>',
                 unsafe_allow_html=True,
             )
+        with col_hdr3:
+            if preview_url:
+                st.link_button(
+                    "🌐 Open in Browser",
+                    url=preview_url,
+                    help="Open latest generated website in a separate browser tab",
+                    use_container_width=True,
+                )
 
         # Prominently distinguish AI-generated vs Deterministic Fallback
         meta = st.session_state.get("generation_meta") or {}
@@ -277,6 +506,39 @@ with col_right:
                 st.markdown(f"**Background Style:** `{current_state.theme.background_style or 'solid'}`")
                 st.markdown(f"**Navbar Style:** `{current_state.theme.nav_style or 'sticky_glass'}`")
 
+        with st.expander("💾 Export & Download Assets (JSON & Standalone HTML)", expanded=False):
+            col_d1, col_d2, col_d3 = st.columns(3)
+            with col_d1:
+                st.download_button(
+                    label="📥 Download State JSON",
+                    data=current_state.model_dump_json(indent=2),
+                    file_name=f"sitepilot_state_v{current_state.version}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with col_d2:
+                st.download_button(
+                    label="🌐 Download Standalone HTML",
+                    data=rendered_html,
+                    file_name=f"sitepilot_website_v{current_state.version}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+            with col_d3:
+                edit_history_raw = st.session_state.get("edit_history", [])
+                history_json = json.dumps(
+                    [h.model_dump() if hasattr(h, "model_dump") else h for h in edit_history_raw],
+                    indent=2,
+                    default=str,
+                )
+                st.download_button(
+                    label="📜 Download Audit Log",
+                    data=history_json,
+                    file_name=f"sitepilot_audit_log_v{current_state.version}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+
     else:
         st.markdown(
             """
@@ -302,6 +564,7 @@ with col_right:
             "📄 Website State",
             "🖼️ Visual Media Slots",
             "🔗 Anchor & Nav Map",
+            "📜 Event & Audit Log",
         ])
 
         with diag_tabs[0]:
@@ -425,3 +688,22 @@ with col_right:
                 st.success("✅ All navigation and CTA anchors use internal smooth-scroll DOM targets with `@keyframes formPulseHighlight`. Zero iframe parent navigation.")
             else:
                 st.caption("No anchor map available yet.")
+
+        with diag_tabs[5]:
+            st.markdown("#### Chronological Event & Version Transition Log")
+            hist_items = st.session_state.get("edit_history", [])
+            if hist_items:
+                for idx, h in enumerate(reversed(hist_items)):
+                    v_after = getattr(h, "version", "?")
+                    v_before = getattr(h, "version_before", "?")
+                    inst = getattr(h, "instruction", "Initial generation")
+                    success = getattr(h, "success", True)
+                    ts = getattr(h, "timestamp", "")
+                    badge = "✅ Success" if success else "❌ Failed / Rejected"
+                    st.markdown(f"**Event #{len(hist_items) - idx}: v{v_before} $\\to$ v{v_after}** — `{badge}` (`{ts}`)")
+                    st.markdown(f"*{inst}*")
+                    if hasattr(h, "model_dump"):
+                        st.json(h.model_dump())
+                    st.markdown("---")
+            else:
+                st.caption("Initial website generated at v1. No edit transactions recorded yet.")

@@ -1,0 +1,11 @@
+sample_id,business_name,industry,status,plan_valid,state_valid,section_completeness,section_count,layout_strategy,hero_variant,wcag_aa_compliant,min_contrast_ratio,emoji_free,html_rendered,html_bytes,edit_patch_success,noop_detected_properly,rollback_success,is_fallback,total_latency_ms
+sample-01-zenith-fitness,Zenith Fitness Studio,Fitness & Wellness,PASSED,True,True,True,5,bold_promotional,centered,True,7.49,True,True,47021,True,True,True,True,11.26
+sample-02-artisan-crust-bakery,Artisan Crust Bakery & Cafe,Food & Beverage / Retail,PASSED,True,True,True,5,artisan_storefront,storefront,True,5.24,True,True,49707,True,True,True,True,5.86
+sample-03-pulseflow-analytics,PulseFlow Analytics,B2B SaaS / Technology,PASSED,True,True,True,5,luxury_editorial,editorial_showcase,True,4.59,True,True,47229,True,True,True,True,5.42
+sample-04-paws-claws-resort,Paws & Claws Luxury Pet Resort,Pet Care & Services,PASSED,True,True,True,5,modern_showcase,split,True,6.02,True,True,48022,True,True,True,True,6.22
+sample-05-aura-interior-design,Aura Interior Architecture,Architecture & Design,PASSED,True,True,True,5,luxury_editorial,editorial_showcase,True,4.59,True,True,47229,True,True,True,True,4.6
+sample-06-helios-solar-energy,Helios Clean Energy Solutions,Renewable Energy & Cleantech,PASSED,True,True,True,5,modern_showcase,split,True,5.17,True,True,48166,True,True,True,True,6.31
+sample-07-veritas-legal-partners,Veritas Legal & Advisory Partners,Legal & Corporate Services,PASSED,True,True,True,5,modern_showcase,split,True,5.17,True,True,48159,True,True,True,True,5.42
+sample-08-origin-roast-coffee,Origin Roast Single-Estate Coffee,Food & Beverage / E-Commerce,PASSED,True,True,True,6,modern_showcase,split,True,5.17,True,True,49176,True,True,True,True,5.44
+sample-09-serenity-mind-counseling,Serenity Mind Counseling & Therapy,Healthcare & Mental Wellness,PASSED,True,True,True,6,modern_showcase,split,True,5.17,True,True,49176,True,True,True,True,4.6
+sample-10-apex-cyberdefense,Apex CyberDefense Systems,Cybersecurity & IT Infrastructure,PASSED,True,True,True,5,saas_modern,centered,True,9.9,True,True,49039,True,True,True,True,4.67

@@ -9,8 +9,9 @@ All user and model text is strictly HTML-escaped.
 import html
 import re
 from typing import Any, Dict, List, Optional
-from src.schema import WebsiteState, Section, SectionStyle
+from src.schema import WebsiteState, Section, SectionStyle, strip_star_emojis, DEFAULT_FAQ_ITEMS
 from src.image_service import retrieve_image_for_description, retrieve_image_slots
+from src.color_utils import resolve_theme_colors, get_readable_foreground, get_contrast_ratio
 
 
 def sanitize_url(url: Optional[str]) -> str:
@@ -124,22 +125,30 @@ def render_action_link(
 
 
 def get_section_style_css(style: SectionStyle, default_bg: str, default_text: str) -> str:
-    """Compute inline CSS declarations from SectionStyle."""
+    """
+    Compute inline CSS declarations from SectionStyle, ensuring WCAG contrast compliance.
+    Calculates readable foregrounds dynamically when background colors or variants change.
+    """
     styles = []
 
+    # Determine effective background color
+    eff_bg = default_bg
     if style.background_color:
+        eff_bg = style.background_color
         styles.append(f"background-color: {escape_text(style.background_color)};")
     elif style.variant == "dark":
+        eff_bg = "#0f172a"
         styles.append("background-color: #0f172a;")
     elif style.variant == "light":
+        eff_bg = "#f8fafc"
         styles.append("background-color: #f8fafc;")
 
+    # Determine effective text color with WCAG contrast guarantee
     if style.text_color:
         styles.append(f"color: {escape_text(style.text_color)};")
-    elif style.variant == "dark":
-        styles.append("color: #f8fafc;")
-    elif style.variant == "light":
-        styles.append("color: #1e293b;")
+    elif style.background_color or style.variant:
+        eff_text = get_readable_foreground(eff_bg)
+        styles.append(f"color: {eff_text};")
 
     padding_map = {
         "small": "40px 24px",
@@ -236,9 +245,9 @@ def render_hero_section(section: Section, all_sections: Optional[List[Section]] 
     all_sec = all_sections or [section]
     variant = (section.style.layout_variant or c.get("layout_variant") or "split").lower()
 
-    title = escape_text(c.get("title", "Elevate Your Experience"))
-    subtitle = escape_text(c.get("subtitle", ""))
-    pill_badge = escape_text(c.get("pill_badge") or c.get("badge") or "✨ Premier Quality & Care")
+    title = escape_text(strip_star_emojis(c.get("title", "Elevate Your Experience")))
+    subtitle = escape_text(strip_star_emojis(c.get("subtitle", "")))
+    pill_badge = escape_text(strip_star_emojis(c.get("pill_badge") or c.get("badge") or "Premier Quality & Care"))
 
     cta_text = c.get("cta_text") or c.get("cta") or "Book Appointment"
     cta_link = c.get("cta_link") or "#appointment-form"
@@ -413,8 +422,8 @@ def render_features_section(section: Section, all_sections: Optional[List[Sectio
     c = section.content
     variant = (section.style.layout_variant or c.get("layout_variant") or "grid").lower()
 
-    heading = escape_text(c.get("heading", "Our Premier Services"))
-    subheading = escape_text(c.get("subheading", "Designed with exceptional care and attention to detail."))
+    heading = escape_text(strip_star_emojis(c.get("heading", "Our Premier Services")))
+    subheading = escape_text(strip_star_emojis(c.get("subheading", "Designed with exceptional care and attention to detail.")))
     items = c.get("items", [])
 
     # Variant A: Circular Pill Cards (Artisan / Salon / Food)
@@ -546,8 +555,8 @@ def render_pricing_section(section: Section, all_sections: Optional[List[Section
     all_sec = all_sections or [section]
     variant = (section.style.layout_variant or c.get("layout_variant") or "cards").lower()
 
-    heading = escape_text(c.get("heading", "Our Packages & Pricing"))
-    subheading = escape_text(c.get("subheading", "Transparent pricing with no hidden surprises."))
+    heading = escape_text(strip_star_emojis(c.get("heading", "Our Packages & Pricing")))
+    subheading = escape_text(strip_star_emojis(c.get("subheading", "Transparent pricing with no hidden surprises.")))
     plans = c.get("plans", [])
 
     # Variant A: Horizontal Table / Rows (SaaS / Athletic)
@@ -660,8 +669,8 @@ def render_testimonials_section(section: Section, all_sections: Optional[List[Se
     c = section.content
     variant = (section.style.layout_variant or c.get("layout_variant") or "grid").lower()
 
-    heading = escape_text(c.get("heading", "Loved by Our Community"))
-    subheading = escape_text(c.get("subheading", "Real feedback from genuine clients and families."))
+    heading = escape_text(strip_star_emojis(c.get("heading", "Loved by Our Community")))
+    subheading = escape_text(strip_star_emojis(c.get("subheading", "Real feedback from genuine clients and families.")))
     items = c.get("items", [])
 
     # Variant A: Spotlight Testimonial
@@ -756,20 +765,92 @@ def render_testimonials_section(section: Section, all_sections: Optional[List[Se
 
 
 def render_text_section(section: Section, all_sections: Optional[List[Section]] = None) -> str:
-    """Render informative Text / Story section."""
+    """
+    Render informative Text / Story section.
+    Consistently supports heading, subheading, body text, multiple paragraphs,
+    optional images (split layout), alignment (left, center, right), and styling.
+    """
     c = section.content
-    heading = escape_text(c.get("heading", "Our Story"))
-    subheading = escape_text(c.get("subheading", ""))
-    body = c.get("body", "")
+    heading = escape_text(strip_star_emojis(c.get("heading") or c.get("title") or "Our Story"))
+    subheading = escape_text(strip_star_emojis(c.get("subheading") or c.get("subtitle") or ""))
 
-    paragraphs = body.split("\n\n") if body else ["Dedicated to excellence in every detail."]
+    # Extract body content supporting all aliases
+    raw_body = c.get("body") or c.get("text") or c.get("content") or c.get("description") or c.get("story") or ""
+
+    if isinstance(raw_body, list):
+        paragraphs = [str(p).strip() for p in raw_body if str(p).strip()]
+    elif isinstance(raw_body, str):
+        if "\n\n" in raw_body:
+            paragraphs = [p.strip() for p in raw_body.split("\n\n") if p.strip()]
+        elif "\n" in raw_body:
+            paragraphs = [p.strip() for p in raw_body.split("\n") if p.strip()]
+        elif raw_body.strip():
+            paragraphs = [raw_body.strip()]
+        else:
+            paragraphs = ["Dedicated to delivering exceptional quality, personalized service, and genuine passion in everything we do."]
+    else:
+        paragraphs = [str(raw_body).strip()] if str(raw_body).strip() else ["Dedicated to delivering exceptional quality, personalized service, and genuine passion in everything we do."]
+
     paragraphs_html = "".join([f'<p class="text-body">{escape_text(p)}</p>' for p in paragraphs if p.strip()])
     sub_html = f'<p class="section-subtitle">{subheading}</p>' if subheading else ""
 
+    # Alignment (left, center, right)
+    alignment = (section.style.alignment or c.get("alignment") or "left").lower()
+    if alignment not in ("left", "center", "right"):
+        alignment = "left"
+
+    # Optional image support (split layout)
+    img_url = c.get("image_url") or c.get("url") or c.get("image") or c.get("img") or c.get("photo")
+    img_desc = c.get("image_description") or c.get("alt") or c.get("caption")
+    layout_variant = (section.style.layout_variant or c.get("layout_variant") or "default").lower()
+    has_image = bool(img_url or (img_desc and not img_desc.startswith("http")) or layout_variant in ("split", "media_left", "media_right"))
+
+    if has_image:
+        media_html = render_visual_media(
+            image_url=img_url,
+            image_description=img_desc,
+            alt=heading,
+            css_class="text-media-img",
+        )
+        if layout_variant == "media_left":
+            grid_content = f"""
+            <div class="text-split-grid media-left">
+                <div class="text-media-col">{media_html}</div>
+                <div class="text-content-col text-align-{alignment}">
+                    <h2 class="section-title">{heading}</h2>
+                    {sub_html}
+                    <div class="text-card">
+                        {paragraphs_html}
+                    </div>
+                </div>
+            </div>
+            """
+        else:
+            grid_content = f"""
+            <div class="text-split-grid media-right">
+                <div class="text-content-col text-align-{alignment}">
+                    <h2 class="section-title">{heading}</h2>
+                    {sub_html}
+                    <div class="text-card">
+                        {paragraphs_html}
+                    </div>
+                </div>
+                <div class="text-media-col">{media_html}</div>
+            </div>
+            """
+        return f"""
+        <div class="container text-container">
+            {grid_content}
+        </div>
+        """
+
+    header_class = f"section-header-{alignment}" if alignment in ("center", "left", "right") else "section-header-center"
     return f"""
-    <div class="container text-container">
-        <h2 class="section-title">{heading}</h2>
-        {sub_html}
+    <div class="container text-container text-align-{alignment}">
+        <div class="{header_class}">
+            <h2 class="section-title">{heading}</h2>
+            {sub_html}
+        </div>
         <div class="text-card">
             {paragraphs_html}
         </div>
@@ -817,7 +898,7 @@ def render_image_section(section: Section, all_sections: Optional[List[Section]]
         return f"""
         <div class="container gallery-container">
             <div class="section-header-center">
-                <h2 class="section-title">{escape_text(c.get("heading", "Selected Architectural Portfolio"))}</h2>
+                <h2 class="section-title">{escape_text(strip_star_emojis(c.get("heading", "Selected Architectural Portfolio")))}</h2>
                 {caption_html}
             </div>
             <div class="gallery-grid-row">
@@ -847,8 +928,8 @@ def render_cta_section(section: Section, all_sections: Optional[List[Section]] =
     """Render CTA conversion banner with high contrast and prominent action."""
     c = section.content
     all_sec = all_sections or [section]
-    heading = escape_text(c.get("heading", "Ready to Get Started?"))
-    subheading = escape_text(c.get("subheading", "Book your visit today and experience the difference."))
+    heading = escape_text(strip_star_emojis(c.get("heading", "Ready to Get Started?")))
+    subheading = escape_text(strip_star_emojis(c.get("subheading", "Book your visit today and experience the difference.")))
     button_text = c.get("button_text") or c.get("cta_text") or "Book Appointment Now"
     button_link = c.get("button_link") or "#appointment-form"
 
@@ -868,8 +949,8 @@ def render_cta_section(section: Section, all_sections: Optional[List[Section]] =
 def render_contact_section(section: Section, all_sections: Optional[List[Section]] = None) -> str:
     """Render Contact & Appointment / Demo / Order Booking section with business-specific interactive form."""
     c = section.content
-    heading = escape_text(c.get("heading", "Book Your Appointment"))
-    subheading = escape_text(c.get("subheading", "Select your preferences below or contact our friendly team directly."))
+    heading = escape_text(strip_star_emojis(c.get("heading", "Book Your Appointment")))
+    subheading = escape_text(strip_star_emojis(c.get("subheading", "Select your preferences below or contact our friendly team directly.")))
     email = escape_text(c.get("email", "hello@studio.com"))
     phone = escape_text(c.get("phone", "(555) 234-5678"))
     hours = escape_text(c.get("hours", "Monday – Saturday: 8:00 AM – 6:00 PM"))
@@ -919,15 +1000,24 @@ def render_contact_section(section: Section, all_sections: Optional[List[Section
                 """
             )
 
+    alignment = (section.style.alignment or c.get("alignment") or "left").lower()
+    if alignment not in ("left", "center", "right"):
+        alignment = "left"
+
+    header_class = f"section-header-{alignment}" if alignment in ("center", "left", "right") else "section-header-center"
+
     return f"""
     <div class="container contact-container">
         <div class="section-header-center">
+    <div class="container contact-container text-align-{alignment}">
+        <div class="{header_class}">
             <h2 class="section-title">{heading}</h2>
             {f'<p class="section-subtitle">{subheading}</p>' if subheading else ''}
         </div>
         
         <div class="contact-layout">
             <div class="contact-info-card">
+            <div class="contact-info-card text-align-{alignment}">
                 <h3>Contact & Location</h3>
                 <p>We are dedicated to providing an exceptional experience. Reach out directly or submit your details.</p>
                 <div class="contact-info-list">
@@ -939,9 +1029,11 @@ def render_contact_section(section: Section, all_sections: Optional[List[Section
             </div>
             
             <div id="appointment-form" class="contact-form-box">
+            <div id="appointment-form" class="contact-form-box text-align-{alignment}">
                 <div id="booking-form"></div>
                 <form onsubmit="event.preventDefault(); alert('{alert_msg}'); return false;">
                     <div class="form-header">
+                    <div class="form-header text-align-{alignment}">
                         <h4>Interactive Request Form</h4>
                         <p>Fill out the fields below to connect with our team directly.</p>
                     </div>
@@ -956,6 +1048,52 @@ def render_contact_section(section: Section, all_sections: Optional[List[Section
     """
 
 
+def render_faq_section(section: Section, all_sections: Optional[List[Section]] = None) -> str:
+    """Render an accessible, responsive FAQ accordion section with 5 Q&A items."""
+    c = section.content
+    heading = escape_text(strip_star_emojis(c.get("heading", "Frequently Asked Questions")))
+    subheading = escape_text(c.get("subheading", "Everything you need to know about our services and policies."))
+    items = c.get("items", [])
+    if not isinstance(items, list) or not items:
+        items = DEFAULT_FAQ_ITEMS
+
+    faq_cards = []
+    for idx, it in enumerate(items, 1):
+        if isinstance(it, dict):
+            q = escape_text(strip_star_emojis(it.get("question", f"Question {idx}")))
+            a = escape_text(it.get("answer", "Please contact our team for further information."))
+        else:
+            q = escape_text(f"Question {idx}")
+            a = escape_text(str(it))
+
+        faq_cards.append(f"""
+        <details class="faq-item">
+            <summary>
+                <span>{q}</span>
+                <span class="faq-toggle-icon">▼</span>
+            </summary>
+            <div class="faq-answer">
+                {a}
+            </div>
+        </details>
+        """)
+
+    sub_html = f'<p class="section-subtitle" style="text-align: center; max-width: 650px; margin: 0 auto 2.5rem auto; font-size: 1.05rem; opacity: 0.85;">{subheading}</p>' if subheading else ""
+
+    return f"""
+    <div class="container" style="max-width: 850px; margin: 0 auto; padding: 1.5rem 1.5rem;">
+        <div class="section-header" style="text-align: center; margin-bottom: 2rem;">
+            <span class="section-tag" style="display: inline-block; padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(37, 99, 235, 0.1); color: var(--primary-color, #2563eb); margin-bottom: 0.75rem;">FAQ</span>
+            <h2 class="section-title" style="font-size: 2.1rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em;">{heading}</h2>
+            {sub_html}
+        </div>
+        <div class="faq-list">
+            {''.join(faq_cards)}
+        </div>
+    </div>
+    """
+
+
 SECTION_RENDERERS = {
     "hero": render_hero_section,
     "text": render_text_section,
@@ -965,6 +1103,7 @@ SECTION_RENDERERS = {
     "pricing": render_pricing_section,
     "cta": render_cta_section,
     "contact": render_contact_section,
+    "faq": render_faq_section,
 }
 
 
@@ -992,6 +1131,8 @@ def render_section(section: Section, all_sections: List[Section], default_bg: st
         alias_html = '<div id="features" style="position:relative; top:-80px;"></div><div id="services" style="position:relative; top:-80px;"></div>'
     elif section.type == "testimonials":
         alias_html = '<div id="testimonials" style="position:relative; top:-80px;"></div><div id="reviews" style="position:relative; top:-80px;"></div>'
+    elif section.type == "faq":
+        alias_html = '<div id="faq" style="position:relative; top:-80px;"></div><div id="questions" style="position:relative; top:-80px;"></div>'
 
     return f"""
     <section id="{escape_text(section.id)}" class="site-section section-{section.type}" style="{custom_styles}">
@@ -1004,12 +1145,14 @@ def render_section(section: Section, all_sections: List[Section], default_bg: st
 def render_top_navbar(state: WebsiteState) -> str:
     """Render modern top navigation bar respecting nav_style, brand_icon, and dynamic CTA button."""
     sections = state.sections
-    title = escape_text(state.title)
+    title = escape_text(strip_star_emojis(state.title))
     theme = state.theme
     nav_style = (theme.nav_style or "sticky_glass").lower()
 
     hero_sec = next((s for s in sections if s.type == "hero"), None)
-    brand_icon = escape_text((hero_sec.content.get("brand_icon") if hero_sec else None) or "✨")
+    raw_icon = (hero_sec.content.get("brand_icon") if hero_sec else None) or ""
+    clean_icon = strip_star_emojis(raw_icon)
+    brand_icon_html = f'<span class="brand-icon">{escape_text(clean_icon)}</span>' if clean_icon else ""
 
     nav_cta_text = (hero_sec.content.get("cta_text") if hero_sec else None) or "Book Appointment"
     nav_cta_link = (hero_sec.content.get("cta_link") if hero_sec else None) or "#appointment-form"
@@ -1018,7 +1161,7 @@ def render_top_navbar(state: WebsiteState) -> str:
     seen_types = set()
 
     for s in sections:
-        if s.type in ("features", "image", "pricing", "testimonials", "contact", "text") and s.type not in seen_types:
+        if s.type in ("features", "image", "pricing", "testimonials", "contact", "text", "faq") and s.type not in seen_types:
             seen_types.add(s.type)
             label_map = {
                 "features": "Services",
@@ -1027,6 +1170,7 @@ def render_top_navbar(state: WebsiteState) -> str:
                 "testimonials": "Reviews",
                 "contact": "Contact",
                 "text": "About",
+                "faq": "FAQ",
             }
             label = label_map.get(s.type, s.type.capitalize())
             target_id = s.id
@@ -1042,7 +1186,7 @@ def render_top_navbar(state: WebsiteState) -> str:
     <header class="site-navbar navbar-{nav_style}">
         <div class="container navbar-container">
             <div class="brand-box">
-                <span class="brand-icon">{brand_icon}</span>
+                {brand_icon_html}
                 <span class="brand-name">{title}</span>
             </div>
             <nav class="nav-links">
@@ -1129,11 +1273,33 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 .brand-box { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
 .brand-icon { font-size: 1.3rem; }
 .nav-links { display: flex; gap: 28px; }
-.nav-link { color: var(--text-color); text-decoration: none; font-size: 0.95rem; font-weight: 600; opacity: 0.85; transition: opacity 0.2s, color 0.2s; }
-.nav-link:hover { opacity: 1; color: var(--primary-color); }
+.nav-link {
+    color: var(--nav-link-color, var(--text-color));
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    opacity: 0.9;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    transition: opacity 0.2s, color 0.2s, background-color 0.2s;
+}
+.nav-link:hover {
+    opacity: 1;
+    color: var(--nav-link-hover-color, var(--primary-color));
+    background-color: var(--nav-link-hover-bg, transparent);
+}
+.nav-link:focus-visible {
+    outline: 2px solid var(--btn-primary-focus-ring, var(--primary-color));
+    outline-offset: 2px;
+}
 
-/* Typography */
+/* Typography & Alignment */
 .section-header-center { text-align: center; max-width: 760px; margin: 0 auto 3.5rem auto; }
+.section-header-left { text-align: left; max-width: 760px; margin: 0 0 2.5rem 0; }
+.section-header-right { text-align: right; max-width: 760px; margin: 0 0 2.5rem auto; }
+.text-align-center { text-align: center; }
+.text-align-left { text-align: left; }
+.text-align-right { text-align: right; }
 .section-title { font-size: 2.4rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.85rem; letter-spacing: -0.03em; }
 .section-subtitle { font-size: 1.12rem; opacity: 0.82; line-height: 1.6; }
 
@@ -1143,10 +1309,50 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
     padding: 0.75rem 1.6rem; font-size: 0.98rem; font-weight: 600; text-decoration: none;
     border-radius: 9999px; transition: all 0.2s ease; cursor: pointer; border: none; outline: none;
 }
-.btn-primary { background-color: var(--primary-color); color: #ffffff !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
-.btn-primary:hover { filter: brightness(0.92); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
-.btn-secondary { background-color: rgba(255, 255, 255, 0.8); color: var(--text-color) !important; border: 1px solid var(--border-color); }
-.btn-secondary:hover { background-color: #ffffff; border-color: var(--primary-color); transform: translateY(-2px); }
+.btn-primary { background-color: var(--primary-color); color: var(--btn-primary-text) !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+.btn-primary:hover {
+    background-color: var(--btn-primary-hover-bg, var(--primary-color));
+    color: var(--btn-primary-hover-text, var(--btn-primary-text)) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.btn-primary:active {
+    background-color: var(--btn-primary-active-bg, var(--primary-color));
+    color: var(--btn-primary-active-text, var(--btn-primary-text)) !important;
+    transform: translateY(0);
+}
+.btn-primary:focus-visible {
+    outline: 3px solid var(--btn-primary-focus-ring, var(--primary-color));
+    outline-offset: 2px;
+}
+.btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    color: var(--btn-secondary-text) !important;
+    border: 1px solid var(--border-color);
+}
+.btn-secondary:hover {
+    background-color: var(--btn-secondary-hover-bg) !important;
+    color: var(--btn-secondary-hover-text) !important;
+    border-color: var(--btn-primary-bg, var(--primary-color));
+    transform: translateY(-2px);
+}
+.btn-secondary:active {
+    background-color: var(--btn-secondary-active-bg) !important;
+    color: var(--btn-secondary-active-text) !important;
+    transform: translateY(0);
+}
+.btn-secondary:focus-visible {
+    outline: 3px solid var(--btn-primary-focus-ring, var(--primary-color));
+    outline-offset: 2px;
+}
+.btn:disabled, .btn[disabled] {
+    background-color: var(--btn-disabled-bg, #94a3b8) !important;
+    color: var(--btn-disabled-text, #ffffff) !important;
+    cursor: not-allowed;
+    opacity: 0.65;
+    transform: none !important;
+    box-shadow: none !important;
+}
 .btn-large { padding: 0.9rem 2.2rem; font-size: 1.05rem; }
 .btn-sm { padding: 0.5rem 1.2rem; font-size: 0.88rem; }
 .btn-block { width: 100%; }
@@ -1186,11 +1392,11 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 }
 .standalone-image-box .visual-media-img { height: auto; max-height: 520px; }
 .standalone-image-box .visual-placeholder-card { min-height: 280px; }
-.floating-badge { position: absolute; background: #ffffff; padding: 0.75rem 1.2rem; border-radius: 16px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); border: 1px solid rgba(226, 232, 240, 0.8); display: flex; flex-direction: column; }
-.top-badge { top: 20px; right: -15px; font-weight: 700; font-size: 0.95rem; color: #1E293B; }
+.floating-badge { position: absolute; background: var(--card-bg); color: var(--card-text); padding: 0.75rem 1.2rem; border-radius: 16px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column; }
+.top-badge { top: 20px; right: -15px; font-weight: 700; font-size: 0.95rem; color: var(--card-text); }
 .bottom-badge { bottom: -15px; left: 20px; }
-.badge-label { font-size: 0.72rem; text-transform: uppercase; color: #64748B; font-weight: 700; letter-spacing: 0.05em; }
-.badge-value { font-size: 0.95rem; font-weight: 700; color: #1E293B; }
+.badge-label { font-size: 0.72rem; text-transform: uppercase; color: var(--muted-text); font-weight: 700; letter-spacing: 0.05em; }
+.badge-value { font-size: 0.95rem; font-weight: 700; color: var(--card-text); }
 
 /* Hero Editorial Showcase Variant (Luxury Interior Design) */
 .hero-editorial-showcase { padding: 30px 0; }
@@ -1244,13 +1450,13 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 .pill-cat-item { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }
 .pill-cat-circle {
     width: 86px; height: 86px; border-radius: 50%;
-    background: #ffffff; border: 2px solid var(--border-color);
+    background: var(--card-bg); border: 2px solid var(--border-color);
     display: flex; align-items: center; justify-content: center;
     font-size: 2.4rem; box-shadow: var(--shadow-soft); transition: transform 0.2s;
 }
 .pill-cat-circle:hover { transform: scale(1.06); border-color: var(--primary-color); }
 .pill-cat-label { font-weight: 700; font-size: 0.95rem; }
-.apart-panel { background: #ffffff; border: 1px solid var(--border-color); border-radius: 24px; padding: 2.5rem; box-shadow: var(--shadow-soft); }
+.apart-panel { background: var(--card-bg); color: var(--card-text); border: 1px solid var(--border-color); border-radius: 24px; padding: 2.5rem; box-shadow: var(--shadow-soft); }
 .apart-panel-title { font-size: 1.4rem; font-weight: 800; margin-bottom: 1.8rem; text-align: center; }
 .apart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.8rem; }
 .apart-item { display: flex; gap: 1rem; align-items: flex-start; }
@@ -1284,7 +1490,7 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 }
 .popular-tag {
     position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-    background: var(--primary-color); color: #ffffff; font-size: 0.75rem; font-weight: 800;
+    background: var(--primary-color); color: var(--btn-primary-text); font-size: 0.75rem; font-weight: 800;
     padding: 0.35rem 1rem; border-radius: 9999px; letter-spacing: 0.05em;
 }
 .price-pill {
@@ -1324,7 +1530,7 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 .testimonial-author-box { display: flex; align-items: center; gap: 0.9rem; }
 .author-avatar {
     width: 48px; height: 48px; border-radius: 50%; background-color: var(--primary-color);
-    color: #ffffff; display: flex; align-items: center; justify-content: center;
+    color: var(--btn-primary-text); display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 1.2rem;
 }
 .author-info { display: flex; flex-direction: column; }
@@ -1356,6 +1562,18 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 /* Contact Section & Interactive Form */
 .contact-layout { display: grid; grid-template-columns: 1fr 1.25fr; gap: 3rem; align-items: start; }
 .contact-info-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 24px; padding: 2.5rem; box-shadow: var(--shadow-soft); }
+.contact-info-card.text-align-center { text-align: center; }
+.contact-info-card.text-align-center h3,
+.contact-info-card.text-align-center p { text-align: center; }
+.contact-info-card.text-align-center .contact-info-list { align-items: center; }
+.contact-info-card.text-align-center .contact-info-row { justify-content: center; text-align: center; }
+.contact-info-card.text-align-center .contact-card-badge { margin: 0 auto; display: inline-block; }
+.contact-info-card.text-align-right { text-align: right; }
+.contact-info-card.text-align-right h3,
+.contact-info-card.text-align-right p { text-align: right; }
+.contact-info-card.text-align-right .contact-info-list { align-items: flex-end; }
+.contact-info-card.text-align-right .contact-info-row { justify-content: flex-end; text-align: right; }
+.contact-info-card.text-align-right .contact-card-badge { margin-left: auto; display: inline-block; }
 .contact-info-card h3 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.8rem; }
 .contact-info-card p { font-size: 0.96rem; opacity: 0.8; margin-bottom: 2rem; }
 .contact-info-list { display: flex; flex-direction: column; gap: 1.4rem; margin-bottom: 2rem; }
@@ -1374,10 +1592,27 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 .form-group { margin-bottom: 1.3rem; }
 .form-group label { display: block; font-size: 0.88rem; font-weight: 700; margin-bottom: 0.45rem; }
 .form-control {
-    width: 100%; padding: 0.8rem 1.1rem; border-radius: 10px; border: 1px solid var(--border-color);
-    background: #FFFFFF; color: #1E293B; font-family: inherit; font-size: 0.95rem; transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%; padding: 0.8rem 1.1rem; border-radius: 10px;
+    border: 1px solid var(--input-border, var(--border-color));
+    background: var(--input-bg, #FFFFFF);
+    color: var(--input-text, #1E293B);
+    font-family: inherit; font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
 }
-.form-control:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+.form-control::placeholder {
+    color: var(--input-placeholder-color, #64748B);
+    opacity: 0.85;
+}
+.form-control:hover {
+    border-color: var(--input-hover-border, var(--primary-color));
+}
+.form-control:focus {
+    outline: none;
+    background: var(--input-focus-bg, var(--input-bg, #FFFFFF));
+    color: var(--input-focus-text, var(--input-text, #1E293B));
+    border-color: var(--input-focus-border, var(--primary-color));
+    box-shadow: 0 0 0 3px var(--input-focus-ring, rgba(37, 99, 235, 0.25));
+}
 
 @keyframes formPulseHighlight {
     0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); transform: scale(1); }
@@ -1395,11 +1630,76 @@ h1, h2, h3, h4, .section-title, .hero-title, .brand-name {
 .footer-links a { color: inherit; text-decoration: none; font-weight: 600; }
 .footer-links a:hover { color: var(--primary-color); }
 
+/* FAQ Accordion Section */
+.faq-list { display: flex; flex-direction: column; gap: 1rem; max-width: 820px; margin: 0 auto; }
+.faq-item {
+    background: var(--card-bg, #ffffff);
+    border: 1px solid var(--border-color, rgba(0,0,0,0.08));
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow-soft, 0 4px 12px rgba(0,0,0,0.03));
+    transition: all 0.2s ease;
+}
+.faq-item summary {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--card-text, var(--text-color, #1e293b));
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item[open] summary .faq-toggle-icon { transform: rotate(180deg); }
+.faq-toggle-icon {
+    font-size: 1.1rem;
+    color: var(--primary-color, #2563eb);
+    transition: transform 0.2s ease;
+}
+.faq-answer {
+    margin-top: 0.9rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border-color, rgba(0,0,0,0.06));
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--card-text, var(--text-color, #475569));
+    opacity: 0.92;
+}
+
 /* Text & Image Sections */
-.text-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 20px; padding: 2.5rem; box-shadow: var(--shadow-soft); }
-.text-body { font-size: 1.05rem; line-height: 1.7; margin-bottom: 1.2rem; }
+.text-container { max-width: 960px; margin: 0 auto; }
+.text-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 2.5rem;
+    box-shadow: var(--shadow-soft);
+    color: var(--card-text);
+}
+.text-paragraphs-box { display: flex; flex-direction: column; gap: 1rem; }
+.text-body { font-size: 1.05rem; line-height: 1.75; color: inherit; margin-bottom: 1.2rem; }
+.text-body:last-child { margin-bottom: 0; }
+.text-split-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 3.5rem;
+    align-items: center;
+}
+.text-split-grid.media-left {
+    grid-template-columns: 1fr 1.1fr;
+}
+.text-content-col { display: flex; flex-direction: column; gap: 1.2rem; }
+.text-media-col { width: 100%; }
+.text-media-img { width: 100%; border-radius: 24px; box-shadow: var(--shadow-soft); object-fit: cover; max-height: 480px; }
 .responsive-image { max-width: 100%; border-radius: 24px; box-shadow: var(--shadow-soft); }
 .image-caption { font-size: 0.9rem; opacity: 0.75; margin-top: 0.6rem; }
+.testimonial-card, .pricing-card, .feature-card, .pricing-row-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.testimonial-card:hover, .feature-card:hover {
+    background-color: var(--card-hover-bg, var(--card-bg));
+}
 
 /* Responsive Adjustments */
 @media (max-width: 900px) {
@@ -1440,11 +1740,18 @@ def render_website(state: WebsiteState) -> str:
     elif bg_style == "gradient_mesh":
         bg_style_rule = "background-image: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(241, 245, 249, 0.8) 100%);"
 
+    # Dynamically resolve WCAG-compliant colors and tokens
+    resolved_colors = resolve_theme_colors(
+        background=theme.background,
+        primary_color=theme.primary_color,
+        text_color=theme.text_color,
+        background_style=bg_style,
+    )
+    token_lines = "\n".join(f"        --{var_name.replace('_', '-')}: {escape_text(var_val)};" for var_name, var_val in resolved_colors.items())
+
     custom_vars = f"""
     :root {{
-        --bg-color: {escape_text(theme.background)};
-        --primary-color: {escape_text(theme.primary_color)};
-        --text-color: {escape_text(theme.text_color)};
+{token_lines}
         --font-family: {escape_text(theme.font_family)};
         --heading-font: {escape_text(heading_font)};
     }}

@@ -16,6 +16,7 @@ SUPPORTED_SECTION_TYPES = [
     "features",
     "testimonials",
     "pricing",
+    "faq",
     "cta",
     "contact",
 ]
@@ -27,8 +28,33 @@ SectionTypeLiteral = Literal[
     "features",
     "testimonials",
     "pricing",
+    "faq",
     "cta",
     "contact",
+]
+
+
+DEFAULT_FAQ_ITEMS = [
+    {
+        "question": "What services do you offer?",
+        "answer": "We provide comprehensive solutions tailored to your unique requirements, from initial consultation through final delivery.",
+    },
+    {
+        "question": "How do I schedule an appointment or get started?",
+        "answer": "You can easily book directly through our online form, contact us via phone, or select one of our packages above.",
+    },
+    {
+        "question": "What are your operating hours and availability?",
+        "answer": "We are open Monday through Friday from 9:00 AM to 6:00 PM, with flexible weekend appointments available upon request.",
+    },
+    {
+        "question": "What is your cancellation and rescheduling policy?",
+        "answer": "We request at least 24 hours notice for cancellations or rescheduling to accommodate other clients.",
+    },
+    {
+        "question": "Do you offer satisfaction guarantees?",
+        "answer": "Yes, customer satisfaction is our top priority. If you are not completely satisfied, our team will work with you to make it right.",
+    },
 ]
 
 
@@ -58,6 +84,18 @@ class SectionStyle(BaseModel):
 
 # -----------------------------------------------------------------------------
 # Content Normalization Helpers
+# -----------------------------------------------------------------------------
+
+def strip_star_emojis(text: Any) -> Any:
+    """
+    Strip all star emojis and characters (⭐, ★, ✨, 🌟, ☆, 💫, 🌠) from text.
+    Ensures that no star emojis appear in generated website titles or section headings.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    cleaned = re.sub(r"[⭐★✨🌟☆💫🌠]", "", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
 # -----------------------------------------------------------------------------
 
 def normalize_section_content(section_type: Optional[str], raw_content: Any) -> Dict[str, Any]:
@@ -141,6 +179,88 @@ def normalize_section_content(section_type: Optional[str], raw_content: Any) -> 
                 c["plans"] = norm_plans
             elif "plans" not in c or not isinstance(plans, list):
                 c["plans"] = []
+        elif s_type == "faq":
+            items = c.get("items")
+            if isinstance(items, list):
+                norm_items = []
+                for it in items:
+                    if isinstance(it, dict):
+                        norm_items.append({
+                            "question": it.get("question", "General Inquiry"),
+                            "answer": it.get("answer", "Please contact our team for full details."),
+                        })
+                    elif isinstance(it, str) and it.strip():
+                        if "? " in it:
+                            q_p, a_p = it.split("? ", 1)
+                            q_p = q_p.strip() + "?"
+                        elif " - " in it:
+                            q_p, a_p = it.split(" - ", 1)
+                        else:
+                            q_p, a_p = it, "Contact us for more details."
+                        norm_items.append({"question": q_p.strip(), "answer": a_p.strip()})
+                c["items"] = norm_items if len(norm_items) >= 5 else (norm_items + DEFAULT_FAQ_ITEMS[len(norm_items):])
+            else:
+                c["items"] = list(DEFAULT_FAQ_ITEMS)
+            if "heading" not in c:
+                c["heading"] = "Frequently Asked Questions"
+            if "subheading" not in c:
+                c["subheading"] = "Everything you need to know about our services and policies."
+        elif s_type == "text":
+            # 1. Heading aliases
+            heading = (
+                c.get("heading")
+                or c.get("title")
+                or c.get("name")
+                or c.get("header")
+                or "About Us"
+            )
+            c["heading"] = str(heading).strip() or "About Us"
+
+            # 2. Subheading aliases
+            subheading = (
+                c.get("subheading")
+                or c.get("subtitle")
+                or c.get("tagline")
+                or c.get("eyebrow")
+                or ""
+            )
+            c["subheading"] = str(subheading).strip() if subheading else ""
+
+            # 3. Body aliases (body, text, content, description, story, paragraphs, details, copy, about, bio)
+            body_val = None
+            for key in ["body", "text", "content", "description", "story", "paragraphs", "paragraph", "details", "copy", "about", "bio", "message"]:
+                if key in c and c[key] is not None:
+                    body_val = c[key]
+                    break
+
+            if isinstance(body_val, list):
+                joined = "\n\n".join(str(p).strip() for p in body_val if str(p).strip())
+                c["body"] = joined or "Dedicated to delivering exceptional quality, personalized service, and genuine passion in everything we do."
+            elif isinstance(body_val, str) and body_val.strip():
+                c["body"] = body_val.strip()
+            elif body_val is not None and not isinstance(body_val, (dict, list)):
+                c["body"] = str(body_val).strip()
+            else:
+                c["body"] = "Dedicated to delivering exceptional quality, personalized service, and genuine passion in everything we do."
+
+            # 4. Optional image aliases
+            img_url = (
+                c.get("image_url")
+                or c.get("url")
+                or c.get("image")
+                or c.get("img")
+                or c.get("photo")
+            )
+            if img_url and isinstance(img_url, str) and img_url.strip():
+                c["image_url"] = img_url.strip()
+
+            img_desc = (
+                c.get("image_description")
+                or c.get("alt")
+                or c.get("caption")
+            )
+            if img_desc and isinstance(img_desc, str) and img_desc.strip():
+                c["image_description"] = img_desc.strip()
         return c
 
     # 2. Null, missing, or boolean values
@@ -203,6 +323,37 @@ def normalize_section_content(section_type: Optional[str], raw_content: Any) -> 
                 "subheading": "Straightforward rates designed to suit your project scope.",
                 "plans": norm_plans,
             }
+        elif s_type == "faq":
+            norm_items = []
+            for it in raw_content:
+                if isinstance(it, dict):
+                    norm_items.append({
+                        "question": it.get("question", "General Question"),
+                        "answer": it.get("answer", "Please contact our team for full details."),
+                    })
+                elif isinstance(it, str) and it.strip():
+                    if "? " in it:
+                        q_p, a_p = it.split("? ", 1)
+                        q_p = q_p.strip() + "?"
+                    elif " - " in it:
+                        q_p, a_p = it.split(" - ", 1)
+                    else:
+                        q_p, a_p = it, "Contact us for more details."
+                    norm_items.append({"question": q_p.strip(), "answer": a_p.strip()})
+            if len(norm_items) < 5:
+                norm_items += DEFAULT_FAQ_ITEMS[len(norm_items):]
+            return {
+                "heading": "Frequently Asked Questions",
+                "subheading": "Everything you need to know about our services and policies.",
+                "items": norm_items,
+            }
+        elif s_type == "text":
+            joined = "\n\n".join(str(x).strip() for x in raw_content if str(x).strip())
+            return {
+                "heading": "About Us",
+                "subheading": "",
+                "body": joined or "Dedicated to delivering exceptional quality, personalized service, and genuine passion in everything we do.",
+            }
         elif s_type == "image":
             gallery_urls = [str(x) for x in raw_content if str(x).strip().startswith(("http://", "https://"))]
             if gallery_urls:
@@ -252,6 +403,12 @@ def normalize_section_content(section_type: Optional[str], raw_content: Any) -> 
                 "subheading": "Transparent rates with no hidden fees.",
                 "plans": [],
             }
+        elif s_type == "faq":
+            return {
+                "heading": "Frequently Asked Questions",
+                "subheading": "Everything you need to know about our services and policies.",
+                "items": list(DEFAULT_FAQ_ITEMS),
+            }
         elif s_type == "cta":
             return {
                 "heading": "Ready to Get Started?",
@@ -293,12 +450,12 @@ def normalize_section_content(section_type: Optional[str], raw_content: Any) -> 
             "cta_link": "#appointment-form",
             "secondary_cta_text": "Explore Packages",
             "secondary_cta_link": "#pricing-1",
-            "pill_badge": "✨ Premier Quality & Care",
+            "pill_badge": "Premier Quality & Care",
             "trust_points": ["Certified Specialists", "100% Satisfaction Guarantee", "Gentle & Personalized Care"],
-            "rating": "Client rating 4.9★",
+            "rating": "Client rating 4.9/5",
             "highlight_service": "Top Rated Experience",
             "image_description": raw_str,
-            "brand_icon": "✨",
+            "brand_icon": "🔹",
         }
 
     elif s_type == "text":
@@ -351,14 +508,14 @@ def normalize_section_content(section_type: Optional[str], raw_content: Any) -> 
             parsed_items.append({
                 "title": t_part.strip(),
                 "description": d_part.strip(),
-                "icon": "✨",
+                "icon": "🔹",
                 "tag": "Feature",
             })
         if not parsed_items:
             parsed_items.append({
                 "title": "Core Services",
                 "description": raw_str,
-                "icon": "✨",
+                "icon": "🔹",
                 "tag": "Feature",
             })
         return {
@@ -465,6 +622,13 @@ def normalize_section_content(section_type: Optional[str], raw_content: Any) -> 
             "hours": "Mon - Fri: 9:00 AM - 6:00 PM",
         }
 
+    elif s_type == "faq":
+        return {
+            "heading": "Frequently Asked Questions",
+            "subheading": raw_str if raw_str else "Everything you need to know about our services and policies.",
+            "items": list(DEFAULT_FAQ_ITEMS),
+        }
+
     return {"raw_text": raw_str}
 
 
@@ -538,8 +702,10 @@ class Section(BaseModel):
             if "cta_text" not in c:
                 c["cta_text"] = "Get Started"
         elif t == "text":
-            if "body" not in c and "heading" not in c:
-                c["body"] = "About Us"
+            if not c.get("heading"):
+                c["heading"] = "About Us"
+            if not c.get("body"):
+                c["body"] = "Dedicated to delivering exceptional quality, personalized service, and genuine passion in everything we do."
         elif t == "image":
             if "alt" not in c:
                 c["alt"] = "Visual Feature"
@@ -562,6 +728,30 @@ class Section(BaseModel):
         elif t == "contact":
             if "heading" not in c:
                 c["heading"] = "Contact Us"
+        elif t == "faq":
+            if "heading" not in c:
+                c["heading"] = "Frequently Asked Questions"
+            if "subheading" not in c:
+                c["subheading"] = "Everything you need to know about our services and policies."
+            items = c.get("items")
+            if not isinstance(items, list) or len(items) < 5:
+                existing = items if isinstance(items, list) else []
+                c["items"] = existing + DEFAULT_FAQ_ITEMS[len(existing):]
+
+        # Ensure no star emojis in any website headings, titles, subheadings, or item names
+        for key in ("title", "heading", "subheading", "name"):
+            if key in c and isinstance(c[key], str):
+                c[key] = strip_star_emojis(c[key])
+        if "items" in c and isinstance(c["items"], list):
+            for it in c["items"]:
+                if isinstance(it, dict):
+                    for k in ("title", "heading", "name", "question", "answer"):
+                        if k in it and isinstance(it[k], str):
+                            it[k] = strip_star_emojis(it[k])
+        if "plans" in c and isinstance(c["plans"], list):
+            for p in c["plans"]:
+                if isinstance(p, dict) and "name" in p and isinstance(p["name"], str):
+                    p["name"] = strip_star_emojis(p["name"])
 
         return self
 
@@ -588,7 +778,7 @@ class WebsitePlan(BaseModel):
         default_factory=lambda: ["Full Name", "Email Address", "Phone Number", "Message"],
         description="Business-specific form fields",
     )
-    brand_icon: str = Field(default="✨", description="Brand emoji or symbol")
+    brand_icon: str = Field(default="🔹", description="Brand emoji or symbol")
     background_style: str = Field(default="solid", description="Global background aesthetic: solid, warm_ivory, dark_glow, editorial_cream, tech_dark, gradient_mesh")
     layout_preferences: Dict[str, str] = Field(
         default_factory=lambda: {
@@ -627,6 +817,11 @@ class WebsitePlan(BaseModel):
         """Backwards compatibility alias for typography."""
         return self.typography
 
+    @field_validator("suggested_title", mode="after")
+    @classmethod
+    def clean_suggested_title(cls, v: str) -> str:
+        return strip_star_emojis(v)
+
     @field_validator("planned_sections")
     @classmethod
     def validate_sections_not_empty(cls, v: List[str]) -> List[str]:
@@ -642,6 +837,11 @@ class WebsiteState(BaseModel):
     version: int = Field(default=1, description="Sequential version number")
     theme: ThemeConfig = Field(default_factory=ThemeConfig, description="Global theme settings")
     sections: List[Section] = Field(default_factory=list, description="Ordered list of page sections")
+
+    @field_validator("title", mode="after")
+    @classmethod
+    def clean_website_title(cls, v: str) -> str:
+        return strip_star_emojis(v)
 
     @model_validator(mode="before")
     @classmethod
@@ -676,3 +876,161 @@ class WebsiteState(BaseModel):
             if s.id == section_id:
                 return s
         return None
+
+
+# -----------------------------------------------------------------------------
+# Phase 4: Patch Engine & Conversational Editing Schemas
+# -----------------------------------------------------------------------------
+
+PatchActionLiteral = Literal[
+    "update_section",
+    "add_section",
+    "remove_section",
+    "reorder_sections",
+    "update_theme",
+]
+
+
+class PatchOperation(BaseModel):
+    """
+    Deterministic patch operation to mutate a WebsiteState.
+    Supports section content/style updates, adding, removing, reordering, and theme updates.
+    """
+    op: PatchActionLiteral = Field(..., description="Action to perform: update_section, add_section, remove_section, reorder_sections, update_theme")
+    target_id: Optional[str] = Field(default=None, description="Target section ID for update or removal")
+    content: Optional[Dict[str, Any]] = Field(default=None, description="Content dictionary updates or new section content")
+    style: Optional[Dict[str, Any]] = Field(default=None, description="Style dictionary updates or new section style")
+    section_type: Optional[SectionTypeLiteral] = Field(default=None, description="Section type for add_section")
+    position: Optional[int] = Field(default=None, description="Insertion index or new position")
+    placement: Optional[Literal["before", "after", "end", "start"]] = Field(default="end", description="Relative placement for added sections")
+    section_ids: Optional[List[str]] = Field(default=None, description="Complete sequence of section IDs for reorder_sections")
+    theme: Optional[Dict[str, Any]] = Field(default=None, description="Theme updates for update_theme")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_patch_operation(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # Map action to op
+            if not data.get("op") and data.get("action"):
+                data["op"] = data["action"]
+
+            # Map target_section_id to target_id
+            if not data.get("target_id") and data.get("target_section_id"):
+                data["target_id"] = data["target_section_id"]
+
+            # Map content_updates / new_section_content to content
+            if not data.get("content"):
+                if data.get("content_updates") is not None:
+                    data["content"] = data["content_updates"]
+                elif data.get("new_section_content") is not None:
+                    data["content"] = data["new_section_content"]
+
+            # Map style_updates / new_section_style to style
+            if not data.get("style"):
+                if data.get("style_updates") is not None:
+                    data["style"] = data["style_updates"]
+                elif data.get("new_section_style") is not None:
+                    data["style"] = data["new_section_style"]
+
+            # Map new_order to section_ids
+            if not data.get("section_ids") and data.get("new_order") is not None:
+                data["section_ids"] = data["new_order"]
+
+            # Map theme_updates to theme
+            if not data.get("theme") and data.get("theme_updates") is not None:
+                data["theme"] = data["theme_updates"]
+
+            # Normalize operation name synonyms
+            raw_op = str(data.get("op", "")).lower().strip()
+            if raw_op in ("update", "modify", "update_content", "update_style", "update_section_content", "update_section_style"):
+                data["op"] = "update_section"
+            elif raw_op in ("add", "insert", "new_section", "create_section"):
+                data["op"] = "add_section"
+            elif raw_op in ("remove", "delete", "drop"):
+                data["op"] = "remove_section"
+            elif raw_op in ("reorder", "move", "sort", "reorder_sections"):
+                data["op"] = "reorder_sections"
+            elif raw_op in ("theme", "update_theme_config", "style_theme", "theme_update"):
+                data["op"] = "update_theme"
+
+            # Clean target_id
+            if data.get("target_id") and isinstance(data["target_id"], str):
+                data["target_id"] = data["target_id"].strip().lstrip("#")
+
+            # Extract section_type if passed as 'type'
+            if not data.get("section_type") and data.get("type"):
+                t = str(data["type"]).lower().strip()
+                if t in SUPPORTED_SECTION_TYPES:
+                    data["section_type"] = t
+
+            # Normalize content if passed as string
+            s_type = data.get("section_type")
+            if "content" in data and not isinstance(data["content"], dict):
+                data["content"] = normalize_section_content(s_type or "text", data["content"])
+        return data
+
+    @property
+    def action(self) -> str:
+        return self.op
+
+    @property
+    def target_section_id(self) -> Optional[str]:
+        return self.target_id
+
+    @property
+    def content_updates(self) -> Optional[Dict[str, Any]]:
+        return self.content
+
+    @property
+    def style_updates(self) -> Optional[Dict[str, Any]]:
+        return self.style
+
+    @property
+    def new_section_content(self) -> Optional[Dict[str, Any]]:
+        return self.content
+
+    @property
+    def new_order(self) -> Optional[List[str]]:
+        return self.section_ids
+
+    @property
+    def theme_updates(self) -> Optional[Dict[str, Any]]:
+        return self.theme
+
+
+class EditPlan(BaseModel):
+    """Structured plan of deterministic patch operations generated by Edit Agent."""
+    summary: str = Field(..., description="Brief natural language summary of planned changes")
+    operations: List[PatchOperation] = Field(default_factory=list, description="Ordered list of operations to execute")
+
+
+class OperationRecord(BaseModel):
+    """Detailed audit record for an individual patch operation."""
+    op: str = Field(..., description="Operation type: update_section, add_section, remove_section, reorder_sections, update_theme, restore_version")
+    target_id: Optional[str] = Field(default=None, description="Target section ID if applicable")
+    property_path: Optional[str] = Field(default=None, description="Affected property or path (e.g. style.variant, content.cta_text, sections)")
+    previous_value: Any = Field(default=None, description="Value prior to mutation")
+    new_value: Any = Field(default=None, description="Value after mutation")
+    status: Literal["success", "failed", "rolled_back"] = Field(default="success", description="Status of this individual operation")
+    details: Optional[str] = Field(default=None, description="Human-readable outcome or failure reason")
+
+
+class EditHistoryItem(BaseModel):
+    """Audit log record for an edit operation."""
+    version: int = Field(..., description="Website version resulting from this edit (or current version if rejected)")
+    version_before: int = Field(default=1, description="Website version prior to this edit")
+    instruction: str = Field(..., description="User's original conversational request")
+    summary: str = Field(default="", description="Summary of applied changes")
+    operations: List[Dict[str, Any]] = Field(default_factory=list, description="Applied patch operations")
+    operation_records: List[OperationRecord] = Field(default_factory=list, description="Individual operation before/after records")
+    timestamp: str = Field(..., description="ISO 8601 timestamp of edit")
+    success: bool = Field(default=True, description="Whether the edit succeeded and was committed")
+    error: Optional[str] = Field(default=None, description="Error message if operation failed")
+
+    @property
+    def version_after(self) -> int:
+        return self.version
+
+    @property
+    def operations_applied(self) -> List[Dict[str, Any]]:
+        return self.operations

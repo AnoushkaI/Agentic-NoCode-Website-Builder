@@ -31,9 +31,10 @@ The system uses structured Pydantic schemas as the contract between AI modules a
 | **Generalized Fix** | Generalized Website Generation, Section Completeness & Visual Media | ✅ **Completed** |
 | **Design Diversity Fix** | Generation Intelligence, Diverse Layouts & Form Interaction Fix | ✅ **Completed** |
 | **Validation & Diagnostics Fix** | Content Normalization, Bounded Repair & Diagnostics Safety | ✅ **Completed** |
-| **Phase 4** | Conversational Edit Agent & Deterministic Patch Engine | ⏳ Pending Next Prompt |
-| **Phase 5** | Website State Management, Version History & Diagnostic Logs | ⏳ Pending |
-| **Phase 6** | End-to-End Tests, Failure Analysis & Demo Verification | ⏳ Pending |
+| **Phase 4** | Conversational Edit Agent & Deterministic Patch Engine | ✅ **Completed** |
+| **Preview & Edit Fix** | Contact Alignment, Preview Update & Standalone Browser Tab Serving | ✅ **Completed** |
+| **Phase 5** | Website State Management, Version History, Asset Export & Benchmark Harness | ✅ **Completed** |
+| **Phase 6** | End-to-End Tests, Failure Analysis & Demo Verification | ⏳ Pending Next Phase |
 
 ---
 
@@ -215,13 +216,160 @@ The system uses structured Pydantic schemas as the contract between AI modules a
 
 ---
 
-## 11. Next Phase: Phase 4
-- Implement conversational Edit Agent receiving current `WebsiteState`, user natural language instruction, and allowed operation schema.
-- Implement pure, deterministic Python patch engine for:
-  - `update`: Content and style property changes (e.g. `content.cta_text`, `style.variant`, `style.layout_variant`).
-  - `add`: Insert new section with stable ID at position.
-  - `remove`: Remove section by ID.
-  - `reorder`: Reorder section by ID to new position.
-- Validate resulting mutated state copy with Pydantic; reject invalid patches and preserve current valid state.
-- Increment version counter upon successful edits.
-- Note: Phase 4 has **not** been started in accordance with project constraints.
+## 10. Phase 4 Summary — Conversational Edit Agent & Deterministic Patch Engine
+
+### Objectives Achieved:
+1. **Conversational Edit Agent (`src/editor.py`):**
+   - Implemented `plan_edits(instruction, state, provider)` that receives natural language edit requests in the context of the active `WebsiteState` and generates structured JSON patch operations (`EditPlan`), never arbitrary raw HTML or executable CSS.
+   - Enforces a bounded 1-attempt repair mechanism on malformed JSON outputs.
+   - Features a deterministic, context-aware offline fallback engine supporting standard user requests ("Make hero darker", "Change CTA to ...", "Add testimonials", "Add pricing", "Change theme color", "Reorder sections", "Modify form fields").
+2. **Deterministic Patch Engine (`src/patch_engine.py`):**
+   - Implemented pure Python mutation functions: `apply_update_section`, `apply_add_section`, `apply_remove_section`, `apply_reorder_sections`, `apply_update_theme`.
+   - Executes mutations strictly on a `deepcopy` of the current state.
+   - Validates mutated state using Pydantic `WebsiteState.model_validate()`.
+   - On validation success: increments version counter ($v_{new} = v_{current} + 1$), constructs an immutable `EditHistoryItem` audit log, and commits the updated state.
+   - On error or nonexistent section IDs: completely rolls back and returns the unmodified original state.
+   - Preserves all earlier edits across consecutive modifications (e.g. darker hero + changed CTA + added testimonials).
+3. **Dynamic Colors & WCAG 2.1 Contrast Engine (`src/color_utils.py`, `src/renderer.py`):**
+   - Implemented WCAG 2.1 relative luminance calculation ($L = 0.2126 R_l + 0.7152 G_l + 0.0722 B_l$) and contrast ratio calculation ($(L_1 + 0.05) / (L_2 + 0.05)$).
+   - Replaced all hardcoded text color assumptions (such as `#ffffff !important` on primary buttons) with dynamic `--btn-primary-text`, `--card-bg`, `--card-text`, `--nav-bg`, `--input-bg`, `--input-text` design tokens.
+   - Dynamically ensures $\ge 4.5:1$ contrast ratio for text, buttons, and cards on all light, dark, and vibrant hues (e.g. amber `#F59E0B`, navy `#1E3A8A`, dark slate `#0F172A`).
+   - Section style overrides automatically calculate high-contrast foregrounds when custom backgrounds or dark/light variants are applied.
+4. **Streamlit UI Integration (`app.py`):**
+   - Replaced the disabled edit placeholder with an active conversational edit form and `💬 Apply Edit` action.
+   - Displays real-time status notifications and error isolation.
+   - Updates the live preview in-place without triggering full website regeneration.
+   - Renders chronological edit history and version log in an expandable timeline.
+5. **Phase 4 Bug Fix — Provider Injection & Star Emoji Elimination:**
+   - **Provider Error Resolution:** Traced root cause of `Edit Agent Error: name 'provider' is not defined`. In `app.py`, `provider` was only initialized inside the `if generate_clicked:` scope; when submitting the edit form (`apply_submitted`), `provider` was undefined. Resolved by injecting `current_provider = get_provider(selected_provider)` inside `apply_submitted` in `app.py`, and updating `plan_edits` in `src/editor.py` to default to `provider or get_provider(provider_override=provider_name)`. Gracefully handles initialization and API exceptions with deterministic fallback or clear descriptive `EditAgentError` messages.
+   - **Star Emoji Elimination:** Stripped and banned all star emojis (`⭐`, `★`, `✨`, `🌟`, `☆`, `💫`, `🌠`) across website titles, headings, badges, and fallback presets. Added Pydantic field validators on `WebsiteState.title`, `WebsitePlan.suggested_title`, and `Section.validate_content_for_type` (`title`, `heading`, `subheading`, `name`), renderer sanitizers for brand name, icons, and section headings, and explicit negative prompts in planner, generator, and editor agents.
+6. **Phase 4 Improvements — Reliable Editing, Version Restore & Change History:**
+   - **Compound Edits:** Decomposes complex user requests containing multiple modifications (e.g. hero darker + CTA change + FAQ addition) into separate discrete `PatchOperation` objects. Executes all operations atomically in pure Python; if any operation fails, the entire transaction rolls back to preserve the untouched original state and version number.
+   - **Reusable FAQ Component:** Added `"faq"` to `SUPPORTED_SECTION_TYPES` and `SectionTypeLiteral`. Implemented `DEFAULT_FAQ_ITEMS` with 5 structured Q&A items, normalized content dictionary handling, accordion HTML renderer (`<details class="faq-item">` with rotation toggle and high-contrast styling), anchor alias `#faq`, and navbar navigation.
+   - **No-Op & Target Error Handling:** Rejects empty patch plans and nonexistent section targets (such as missing `about-us`) gracefully. Returns informative clarification messages detailing available section IDs, preserves the website state unchanged, and prevents version increments or false success reports.
+   - **Granular Change History & Audit Trail:** Extended edit history with `OperationRecord`, capturing `op`, `target_id`, `property_path`, `previous_value`, `new_value`, `status`, and `details`. Captures complete removed section dictionaries, newly added sections, section reorder lists, and theme changes.
+   - **Immutable Version Snapshots & Restoration:** Stores complete `WebsiteState` snapshots in memory for every version ($v_1, v_2, \dots$). Implemented `restore_version()` to restore any historical snapshot as a brand-new sequential version ($v_{new} = v_{current} + 1$) without deleting or overwriting historical snapshots. Validates restored states with Pydantic before committing.
+   - **Streamlit UI Enhancements:** Added an **Undo Last Edit** control and a **Restore Specific Version** selector with mandatory user confirmation gates. Enhanced the **Edit History & Version Audit Log** expander to display status badges, version transitions ($v_{before} \to v_{after}$), and collapsible before/after value inspections.
+7. **Comprehensive Automated Testing (`tests/test_editor.py`):**
+   - Expanded test suite to 31 tests covering compound edits, atomic rollback, missing section targets, empty patch no-ops, FAQ schema/rendering/placement, detailed before/after audit tracking, undo restoration, and consecutive edits followed by restore and subsequent edit.
+
+8. **Phase 4 Improvements — Generic Text Rendering, Interactive Contrast & Preview Remount:**
+   - **Generic Text Rendering & Alias Normalization:**
+     - *Root Cause:* In `src/schema.py`, `normalize_section_content` had no handler for `s_type == "text"` when `raw_content` was a dictionary; when the LLM returned aliases (`text`, `description`, `content`, `paragraphs`, `details`, `about`), they were ignored and `body` remained empty. Additionally, `Section.validate_content_for_type` only defaulted `body` when `"heading"` was also missing, leading to text sections displaying only headings with blank body cards.
+     - *Resolution:* Added robust dictionary and list normalization mapping all content aliases (`body`, `text`, `content`, `description`, `story`, `paragraphs`, `details`, `copy`, `about`, `bio`) into `c["body"]`. Lists of paragraphs are joined with `\n\n`. Guaranteed non-empty `heading` and `body` defaults in Pydantic schema validation.
+     - *Component Rendering:* Extended `render_text_section` in `src/renderer.py` to support multi-paragraph formatting (`<p class="text-body">`), alignment (`left`, `center`, `right`), and optional imagery in a responsive two-column split layout (`.text-split-grid`, `.text-media-col`, `.text-content-col`).
+   - **Interactive Color Contrast & WCAG Compliance:**
+     - *Root Cause:* Secondary button hover was hardcoded to `background-color: #ffffff;`, rendering text invisible on dark themes. Navigation links hovered to `--primary-color` without contrast verification against `--nav-bg`.
+     - *Resolution:* Enhanced `src/color_utils.py` with `adjust_color_brightness()` and dynamic interactive token generation in `resolve_theme_colors()`:
+       - Primary buttons: normal, hover, active, focus-visible (`--btn-primary-bg`, `--btn-primary-text`, `--btn-primary-hover-bg`, `--btn-primary-hover-text`, `--btn-primary-active-bg`, `--btn-primary-active-text`, `--btn-primary-focus-ring`) ensuring $\ge 4.5:1$ contrast.
+       - Secondary buttons: dynamic theme-aware hover backgrounds (`--btn-secondary-hover-bg`, `--btn-secondary-hover-text`) eliminating white-on-white text disappearance.
+       - Navigation links: `--nav-link-color` and `--nav-link-hover-color` dynamically evaluated against `--nav-bg` to satisfy WCAG AA $\ge 4.5:1$.
+       - Form controls: accessible borders, hover states, input text, and focus rings (`--input-focus-border`, `--input-focus-ring`, `--input-placeholder-color`).
+       - Cards: accessible elevated surfaces and hover tokens (`--card-hover-bg`, `--card-hover-text`).
+   - **Streamlit Preview Parameter Compatibility:**
+     - *Root Cause:* Calling `components.html(..., key=f"preview_v{...}")` produced `TypeError: IframeMixin._html() got an unexpected keyword argument 'key'` because Streamlit's iframe component signature only supports `(html, width=None, height=None, scrolling=False, *, tab_index=None)`.
+     - *Resolution:* Removed the unsupported `key` argument at line 472 in `app.py`. Preserved `components.html(rendered_html, height=720, scrolling=True)` within `.preview-frame-container`. Streamlit natively detects changes in `rendered_html` to re-render the iframe on generation, conversational edits, and version restores.
+
+---
+
+## 11. Files Created / Modified
+- `src/color_utils.py` (Updated: Added `rgb_to_hex`, `adjust_color_brightness`, and comprehensive interactive design tokens with $\ge 4.5:1$ contrast guarantees across normal, hover, active, and disabled states)
+- `src/schema.py` (Updated: Text section content alias normalization for dicts and lists, guaranteed `heading` and `body` presence)
+- `src/renderer.py` (Updated: Multi-paragraph rendering, alignment classes, split image layout, dynamic button/nav/form/card CSS variables)
+- `src/editor.py` (Updated: Deterministic text section creation and update heuristics, prompt directives for narrative preservation)
+- `app.py` (Updated: Reverted unsupported `key` argument in `components.html()`, preserving standard `height=720` and `scrolling=True`)
+- `tests/test_editor.py` (Updated: Added 5 comprehensive test suites covering text normalization, multi-paragraph/split rendering, content preservation across edits, WCAG contrast across light/dark/vibrant themes, and preview iframe rendering pipeline)
+## 11. Preview Update, Contact Alignment & Standalone Browser Preview Server
+1. **Edit Application Pipeline & Property Normalization:**
+   - Traced the complete lifecycle from natural-language edit prompt → `plan_edits()` → `EditPlan` → `apply_patches()` → `WebsiteState` → `render_website()`.
+   - Enhanced `src/patch_engine.py` with `STYLE_PROPERTY_MAP` normalizing style aliases (`align` $\to$ `alignment`) and auto-syncing `alignment` across `op.content` and `target_style`.
+   - Enhanced `THEME_PROPERTY_MAP` normalizing color aliases (`button_color`, `brand_color`, `theme_color`, `primary` $\to$ `primary_color`; `bg`, `bg_color` $\to$ `background`).
+   - Implemented strict no-op detection in `apply_patches()` comparing pre- and post-patch states. If no fields changed, the engine safely rejects the edit with `"No changes were made: the requested edit did not modify any properties in the website state."` without incrementing the version or claiming false success.
+2. **Contact Section Alignment & Location Content:**
+   - Updated `src/renderer.py` `render_contact_section()` to read alignment from `section.style.alignment` or `section.content.get("alignment")`.
+   - Applied CSS alignment classes (`text-align-center`, `text-align-left`, `text-align-right`) to the `.contact-container`, `.section-header-{alignment}`, `.contact-info-card`, and `.contact-form-box`.
+   - Enhanced `BASE_CSS` with targeted alignment styling for `.contact-info-card.text-align-center` and `.contact-info-card.text-align-right`, ensuring headings, paragraphs, info items, and badges center or align cleanly.
+3. **Interactive Colour Contrast Propagation:**
+   - Ensured theme updates propagate directly into rendered CSS custom properties (`--primary-color`, `--btn-primary-bg`, `--btn-primary-hover-bg`, `--btn-primary-active-bg`, `--btn-secondary-hover-bg`).
+   - Verified that all button hover, focus, and active states satisfy WCAG AA $\ge 4.5:1$ contrast against their respective foreground text colors.
+4. **Standalone "Open in Browser" Preview Server:**
+   - Created `src/preview_server.py`: a lightweight local HTTP daemon running on a background daemon thread using Python's standard `http.server.HTTPServer`.
+   - Thread-safe with `_HTML_LOCK`, serving in-memory rendered HTML on `http://localhost:8765/` (with automatic port collision fallback).
+   - Serves strict no-cache headers (`Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`, `Expires: 0`) guaranteeing browser tabs instantly display updated state.
+   - Added `🌐 Open in Browser` button in `app.py` via `st.link_button(..., url=preview_url)` next to the preview header.
+
+---
+
+## 12. Files Created / Modified
+- `src/preview_server.py` (Created: Lightweight local HTTP daemon server serving latest in-memory HTML for separate browser tabs with zero external dependencies)
+- `src/patch_engine.py` (Updated: Added style & theme property alias normalization, auto-syncing alignment, and strict no-op detection preventing bogus version bumps)
+- `src/renderer.py` (Updated: Contact container, card, and form alignment styling; centered/right-aligned contact details and location elements)
+- `src/editor.py` (Updated: Deterministic fallback and LLM prompts for contact alignment and button/theme color updates)
+- `app.py` (Updated: Integrated preview server sync on render and added `st.link_button` "🌐 Open in Browser" in the preview header)
+- `tests/test_editor.py` (Updated: Added 4 regression tests for contact alignment, theme color CSS propagation, no-op rejection, and local preview HTTP handler)
+- `PROJECT_PROGRESS.md` (Updated)
+
+---
+
+---
+
+## 12. Phase 5 Deliverables: State Management, Version History, Asset Export & Benchmark Harness
+1. **Asset Export & Download Controls:**
+   - Implemented in `app.py`:
+     - **Download State JSON:** Generates formatted `sitepilot_state_v{version}.json` containing the full validated Pydantic model contract.
+     - **Download Standalone HTML:** Generates self-contained `sitepilot_website_v{version}.html` with all layout CSS, dynamic WCAG tokens, and smooth-scrolling anchors.
+     - **Download Audit Log JSON:** Generates `sitepilot_audit_log_v{version}.json` recording chronological patch operations, before/after snapshots, and execution timestamps.
+2. **Chronological Audit & Transition Log:**
+   - Added Tab 6 (`📜 Event & Audit Log`) to the Developer Diagnostics & Pipeline Inspection panel in `app.py`.
+   - Surfaces state transitions ($v_{\text{before}} \to v_{\text{after}}$), patch summaries, rollback indicators, and raw operation payloads.
+3. **10-Sample Industry Benchmark Suite:**
+   - Authored `data/sample_inputs.json` with 10 real-world business briefs across fitness, bakery, SaaS telemetry, pet care, architecture, solar energy, corporate law, coffee e-commerce, therapy, and cybersecurity.
+   - Built `scripts/evaluate.py`: an automated benchmark suite testing plan validity, state validity, section completeness, WCAG 2.1 AA contrast ($\ge 4.5:1$), star emoji sanitization, HTML rendering, conversational editing, strict no-op rejection, and version rollback.
+   - Outputs live benchmark results to `data/evaluation_results.json` and `data/evaluation_results.csv`.
+   - Benchmark Score: **10/10 (100.0%) across all evaluated metrics**.
+
+---
+
+## 13. Files Created / Modified
+- `src/preview_server.py` (Created: Lightweight local HTTP daemon server serving in-memory HTML on localhost with cache-busting headers)
+- `src/patch_engine.py` (Updated: Style & theme alias normalization, contact alignment auto-sync, strict no-op detection)
+- `src/renderer.py` (Updated: Contact alignment classes and CSS rules, dynamic interactive WCAG tokens)
+- `src/editor.py` (Updated: Heuristics & regex for CTA buttons, hero headings/subtitles, theme colors, background colors)
+- `app.py` (Updated: Preview server sync on render, `st.link_button` browser launch, export/download expander, and 6th audit log diagnostic tab)
+- `data/sample_inputs.json` (Created: 10 curated benchmark test cases across diverse industries and layout strategies)
+- `scripts/evaluate.py` (Created: Automated evaluation benchmark harness with offline and live provider support)
+- `data/evaluation_results.json` (Created: Detailed evaluation metrics and telemetry across all 10 sample test cases)
+- `data/evaluation_results.csv` (Created: Tabular scorecard of evaluation results)
+- `tests/test_editor.py` (Updated: 40 tests covering patch engine, WCAG contrast, no-op rejection, and preview serving)
+- `README.md` (Updated: Comprehensive setup instructions, architecture diagram, provider configuration, design decisions, and benchmark summary)
+- `PROJECT_PROGRESS.md` (Updated: Phase 5 documentation and verification records)
+
+---
+
+## 14. Verification & Test Results
+- **Full Project Test Suite:**
+  ```powershell
+  python -m pytest tests/ -v
+  ```
+  *Actual Result:* **105 passed in 21.04s**
+  - `tests/test_editor.py`: 40 passed
+  - `tests/test_generation.py`: 26 passed
+  - `tests/test_provider.py`: 10 passed
+  - `tests/test_renderer.py`: 29 passed
+- **Streamlit Application Smoke Check:**
+  ```powershell
+  python -c "import app; print('App smoke check passed!')"
+  ```
+  *Actual Result:* `App smoke check passed!`
+- **10-Sample Benchmark Evaluation Suite:**
+  ```powershell
+  python scripts/evaluate.py
+  ```
+  *Actual Result:* **10/10 Passed (100.0% score across all 9 quality and compliance metrics)**
+
+---
+
+## 15. Next Phase: Phase 6
+- **Phase 6: End-to-End Tests, Failure Analysis & Demo Verification**
+  - Extended multi-turn edge-case testing and performance profiling.
+  - Final video/demo recording scripts and verification checklists.

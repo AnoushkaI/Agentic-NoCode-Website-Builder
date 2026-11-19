@@ -1,0 +1,156 @@
+{
+  "version": "1.0",
+  "description": "10 curated sample inputs and benchmark briefs for SitePilot AI across diverse industries, design languages, and layout strategies.",
+  "samples": [
+    {
+      "id": "sample-01-zenith-fitness",
+      "business_name": "Zenith Fitness Studio",
+      "industry": "Fitness & Wellness",
+      "brief": "Create an energetic, high-contrast website for Zenith Fitness Studio, a premier boutique gym offering personal training, HIIT classes, and nutrition coaching. Include a hero section with a bold CTA to claim a free day pass, a features section highlighting certified coaches and 24/7 access, membership pricing tiers (Basic, Pro, Elite), client testimonials, and an appointment booking contact form.",
+      "target_sections": ["hero", "features", "pricing", "testimonials", "contact"],
+      "tone": "Energetic, bold, motivational",
+      "preferred_hero_variant": "split",
+      "expected_layout_strategy": "bold_promotional",
+      "sample_conversational_edits": [
+        "Change the hero button text to Claim 7-Day Pass",
+        "Make buttons emerald green with #10B981",
+        "Align contact details to center"
+      ]
+    },
+    {
+      "id": "sample-02-artisan-crust-bakery",
+      "business_name": "Artisan Crust Bakery & Cafe",
+      "industry": "Food & Beverage / Retail",
+      "brief": "Design a warm, rustic, and welcoming website for Artisan Crust Bakery & Cafe. We specialize in naturally leavened sourdough breads, hand-laminated French pastries, and specialty espresso. Include an editorial hero with our baking philosophy, a showcase of our signature breads and pastries, morning breakfast combo pricing, customer reviews from neighborhood regulars, our opening hours and location, and an order inquiry form.",
+      "target_sections": ["hero", "text", "features", "pricing", "testimonials", "contact"],
+      "tone": "Warm, artisan, cozy, rustic",
+      "preferred_hero_variant": "editorial",
+      "expected_layout_strategy": "editorial_story",
+      "sample_conversational_edits": [
+        "Change the primary brand color to warm terracotta #C2410C",
+        "Add an FAQ section about catering and gluten-free options before contact",
+        "Center align the contact details"
+      ]
+    },
+    {
+      "id": "sample-03-pulseflow-analytics",
+      "business_name": "PulseFlow Analytics",
+      "industry": "B2B SaaS / Technology",
+      "brief": "Create a sleek, modern, dark-themed landing page for PulseFlow Analytics, a real-time event telemetry and analytics platform built for modern engineering teams. Highlight zero-latency event streaming, automated anomaly detection, and prebuilt dashboards. Include transparent developer pricing tiers (Hobby, Scale, Enterprise), CTO endorsements, and a contact form to book a live technical architecture demo.",
+      "target_sections": ["hero", "features", "pricing", "testimonials", "contact"],
+      "tone": "Modern, technical, authoritative, precise",
+      "preferred_hero_variant": "split",
+      "expected_layout_strategy": "saas_showcase",
+      "sample_conversational_edits": [
+        "Update the hero CTA button to Start Free Cloud Trial",
+        "Change the primary accent color to cyan #06B6D4",
+        "Make the hero section center aligned"
+      ]
+    },
+    {
+      "id": "sample-04-paws-claws-resort",
+      "business_name": "Paws & Claws Luxury Pet Resort",
+      "industry": "Pet Care & Services",
+      "brief": "Build a playful, trustworthy website for Paws & Claws Luxury Pet Resort. We provide gentle organic dog grooming, cage-free luxury boarding suites, and outdoor socialization daycare supervised by certified pet specialists. Include a friendly hero section, our key care amenities, grooming and boarding package rates, delighted pet parent reviews, and a reservation booking form.",
+      "target_sections": ["hero", "features", "pricing", "testimonials", "contact"],
+      "tone": "Playful, friendly, caring, dependable",
+      "preferred_hero_variant": "split",
+      "expected_layout_strategy": "modern_showcase",
+      "sample_conversational_edits": [
+        "Change the primary button color to #0D9488",
+        "Update the hero heading to Your Pet's Five-Star Vacation",
+        "Align the contact and location section to center"
+      ]
+    },
+    {
+      "id": "sample-05-aura-interior-design",
+      "business_name": "Aura Interior Architecture",
+      "industry": "Architecture & Design",
+      "brief": "Create an elegant, minimalist portfolio website for Aura Interior Architecture, an award-winning residential and commercial interior architecture studio. Focus on timeless Scandinavian minimalism and biophilic organic spaces. Include an editorial hero, our design philosophy text section, signature project features, design consultation packages, press testimonials from Architectural Digest, and a project inquiry form.",
+      "target_sections": ["hero", "text", "features", "pricing", "testimonials", "contact"],
+      "tone": "Minimalist, sophisticated, luxurious, serene",
+      "preferred_hero_variant": "editorial",
+      "expected_layout_strategy": "editorial_story",
+      "sample_conversational_edits": [
+        "Set the theme background to ivory #FFFDF9",
+        "Update the hero CTA link to #appointment-form",
+        "Add an FAQ section with 5 items before contact"
+      ]
+    },
+    {
+      "id": "sample-06-helios-solar-energy",
+      "business_name": "Helios Clean Energy Solutions",
+      "industry": "Renewable Energy & Cleantech",
+      "brief": "Design a forward-looking, clean website for Helios Clean Energy Solutions, a provider of premium residential solar panels, smart inverters, and whole-home battery backup systems. Emphasize energy independence, 25-year warranty, and average 70% bill reduction. Include installation packages, homeowner reviews, and a free home solar audit request form.",
+      "target_sections": ["hero", "features", "pricing", "testimonials", "contact"],
+      "tone": "Clean, eco-friendly, innovative, reliable",
+      "preferred_hero_variant": "centered",
+      "expected_layout_strategy": "modern_showcase",
+      "sample_conversational_edits": [
+        "Change the primary theme color to emerald green #10B981",
+        "Update the hero subtitle to Cut electricity bills by 70% with zero money down",
+        "Align contact section to center"
+      ]
+    },
+    {
+      "id": "sample-07-veritas-legal-partners",
+      "business_name": "Veritas Legal & Advisory Partners",
+      "industry": "Legal & Corporate Services",
+      "brief": "Build a prestigious, credible website for Veritas Legal & Advisory Partners, specializing in corporate mergers, intellectual property law, and venture capital financing for high-growth tech startups. Include an executive hero section, core practice areas, advisory retainer pricing structures, corporate client testimonials, and a confidential consultation scheduling form.",
+      "target_sections": ["hero", "features", "pricing", "testimonials", "contact"],
+      "tone": "Authoritative, dignified, trustworthy, polished",
+      "preferred_hero_variant": "split",
+      "expected_layout_strategy": "editorial_story",
+      "sample_conversational_edits": [
+        "Change primary button color to navy blue #1E3A8A",
+        "Set hero alignment to left",
+        "Center align the contact details and booking form"
+      ]
+    },
+    {
+      "id": "sample-08-origin-roast-coffee",
+      "business_name": "Origin Roast Single-Estate Coffee",
+      "industry": "Food & Beverage / E-Commerce",
+      "brief": "Create an artisanal, sensory-rich storefront website for Origin Roast, a micro-batch specialty roaster sourcing single-origin beans directly from fair-trade cooperatives in Ethiopia and Colombia. Include a storefront hero, roasting process story, bi-weekly coffee subscription tiers, barista customer reviews, and a wholesale inquiry contact form.",
+      "target_sections": ["hero", "text", "features", "pricing", "testimonials", "contact"],
+      "tone": "Artisanal, rich, community-driven, craft",
+      "preferred_hero_variant": "storefront",
+      "expected_layout_strategy": "storefront_catalog",
+      "sample_conversational_edits": [
+        "Change primary theme color to warm terracotta #C2410C",
+        "Update the hero CTA button text to Subscribe to Fresh Beans",
+        "Center align the contact details"
+      ]
+    },
+    {
+      "id": "sample-09-serenity-mind-counseling",
+      "business_name": "Serenity Mind Counseling & Therapy",
+      "industry": "Healthcare & Mental Wellness",
+      "brief": "Design a gentle, empathetic, and calming website for Serenity Mind Counseling, offering evidence-based cognitive behavioral therapy, mindfulness training, and couples counseling. Include an approachable hero section, our therapeutic philosophy, session fees and insurance info, anonymous client feedback, and a confidential introductory consultation booking form.",
+      "target_sections": ["hero", "text", "features", "pricing", "testimonials", "contact"],
+      "tone": "Calm, empathetic, supportive, tranquil",
+      "preferred_hero_variant": "minimal",
+      "expected_layout_strategy": "editorial_story",
+      "sample_conversational_edits": [
+        "Change theme primary color to soothing teal #0D9488",
+        "Add an FAQ section before contact",
+        "Center align contact section details"
+      ]
+    },
+    {
+      "id": "sample-10-apex-cyberdefense",
+      "business_name": "Apex CyberDefense Systems",
+      "industry": "Cybersecurity & IT Infrastructure",
+      "brief": "Create an impactful, high-security website for Apex CyberDefense Systems, providing 24/7 Managed SOC, zero-trust endpoint protection, and automated compliance for healthcare and fintech companies. Include a high-tech hero section, core defense pillars, subscription monitoring plans, CISO testimonials, and a request form for a free vulnerability threat assessment.",
+      "target_sections": ["hero", "features", "pricing", "testimonials", "contact"],
+      "tone": "High-tech, resilient, vigilant, enterprise",
+      "preferred_hero_variant": "split",
+      "expected_layout_strategy": "saas_showcase",
+      "sample_conversational_edits": [
+        "Change primary button color to indigo #4F46E5",
+        "Update hero CTA button to Request Free Vulnerability Scan",
+        "Center align contact details"
+      ]
+    }
+  ]
+}

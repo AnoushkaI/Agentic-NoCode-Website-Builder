@@ -41,7 +41,8 @@ CRITICAL RULES:
 3. You MUST generate EVERY section listed in the plan's 'planned_sections'. Do NOT omit any section. A website with only a hero section when other sections were planned will be rejected.
 4. Allowed section types are ONLY: {SUPPORTED_SECTION_TYPES}.
 5. Generate rich, persuasive, professional business copy — never minimal placeholders.
-6. The 'theme' object MUST include:
+6. CRITICAL RULE: Do NOT include any star emojis or symbols (e.g. ⭐, ★, ✨, 🌟, ☆, 💫, 🌠) in the website title, brand name, brand_icon, or any section headings.
+7. The 'theme' object MUST include:
    - "background": Background color hex
    - "primary_color": Primary brand color hex
    - "text_color": Text color hex
@@ -60,7 +61,7 @@ CRITICAL RULES:
      * "secondary_cta_text": Secondary action (e.g. "Explore Packages", "View Daily Menu")
      * "secondary_cta_link": Target section anchor (e.g. "#pricing-1" or "#features-1")
      * "trust_points": List of 3 key assurances
-     * "rating": Social proof string (e.g. "Client rating 4.9★")
+     * "rating": Social proof string (e.g. "Client rating 4.9/5")
      * "highlight_service": Short highlight
      * "brand_icon": Appropriate emoji icon (e.g. 🏛️, 🛡️, 🥐)
      * "image_description": Descriptive prompt for visual card
@@ -126,7 +127,7 @@ def create_generic_fallback_website(brief: str, plan: Optional[WebsitePlan] = No
     heading_font = plan.heading_font if plan else "Inter, sans-serif"
     bg_style = plan.background_style if plan else "solid"
     nav_style = plan.nav_style if plan else "sticky_glass"
-    brand_icon = plan.brand_icon if plan else "✨"
+    brand_icon = plan.brand_icon if plan else "🔹"
     form_type = plan.form_type if plan else "contact"
     form_fields = plan.form_fields if plan else ["Full Name", "Email Address", "Phone Number", "Service Needed", "Message"]
     palette = plan.color_scheme if plan else {
@@ -153,13 +154,13 @@ def create_generic_fallback_website(brief: str, plan: Optional[WebsitePlan] = No
                     content={
                         "title": f"Exceptional Quality & Care at {title}",
                         "subtitle": "Discover our dedicated services designed with passion, precision, and a commitment to excellence.",
-                        "pill_badge": f"{brand_icon} Premier Quality & Service",
+                        "pill_badge": f"{brand_icon} Premier Quality & Service".strip(),
                         "cta_text": plan.nav_cta_text if plan else "Get Started",
                         "cta_link": plan.nav_cta_link if plan else "#appointment-form",
                         "secondary_cta_text": "Explore Packages",
                         "secondary_cta_link": "#pricing-1",
                         "trust_points": ["Certified Experts", "100% Satisfaction Guarantee", "Dedicated Support"],
-                        "rating": "Client rating 4.9★",
+                        "rating": "Client rating 4.9/5",
                         "highlight_service": "Premier Service Package",
                         "brand_icon": brand_icon,
                         "image_description": f"Professional showcase photography for {title}",
@@ -185,7 +186,7 @@ def create_generic_fallback_website(brief: str, plan: Optional[WebsitePlan] = No
                             {
                                 "title": "Master Craftsmanship",
                                 "description": "Decades of combined experience ensuring top-tier execution and lasting results.",
-                                "icon": "⭐",
+                                "icon": "🏆",
                                 "tag": "Expertise",
                             },
                             {
@@ -197,7 +198,7 @@ def create_generic_fallback_website(brief: str, plan: Optional[WebsitePlan] = No
                             {
                                 "title": "Ongoing Support",
                                 "description": "Dedicated assistance and follow-up care to ensure complete client satisfaction.",
-                                "icon": "✨",
+                                "icon": "🤝",
                                 "tag": "Support",
                             },
                         ],
@@ -544,7 +545,7 @@ def create_cloud_security_fallback_website() -> WebsiteState:
                         "Zero Compute Overhead",
                         "Continuous SOC2 & ISO27001 Auditing",
                     ],
-                    "rating": "Rated 4.9★ on G2 & Gartner Peer Insights",
+                    "rating": "Rated 4.9 on G2 & Gartner Peer Insights",
                     "highlight_service": "Autonomous Drift Remediation",
                     "image_url": slots.get("hero_url"),
                     "image_description": "Modern cybersecurity threat intelligence dashboard with zero-trust topology",
@@ -851,13 +852,13 @@ def create_pet_grooming_fallback_website() -> WebsiteState:
                 content={
                     "title": "Fresh cuts, clean coats, and happy tails.",
                     "subtitle": "Give your pet a gentle, stress-free grooming experience with expert care, spa-style baths, breed-specific cuts, and lots of love.",
-                    "pill_badge": "✨ Trusted local pet spa for dogs and cats",
+                    "pill_badge": "Trusted local pet spa for dogs and cats",
                     "cta_text": "Book a Groom",
                     "cta_link": "#appointment-form",
                     "secondary_cta_text": "View Services",
                     "secondary_cta_link": "#features-1",
                     "trust_points": ["Gentle handling", "Safe products", "Personalized care"],
-                    "rating": "Client rating 4.9★",
+                    "rating": "Client rating 4.9/5",
                     "highlight_service": "Bath + Brush + Nail Trim",
                     "image_url": slots.get("hero_url"),
                     "image_description": "Friendly dog in a warm boutique pet spa",
@@ -985,7 +986,7 @@ def create_fitness_fallback_website() -> WebsiteState:
                     "secondary_cta_text": "Explore Packages",
                     "secondary_cta_link": "#pricing-1",
                     "trust_points": ["Certified Elite Coaches", "State-of-the-art Equipment", "Results Guaranteed"],
-                    "rating": "4.9★ from 300+ Athletes",
+                    "rating": "4.9/5 from 300+ Athletes",
                     "highlight_service": "Unlimited HIIT Classes",
                     "image_url": slots.get("hero_url"),
                     "image_description": "Modern dark athletic gym with barbells and intense lighting",

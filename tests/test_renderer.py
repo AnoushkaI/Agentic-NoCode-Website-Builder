@@ -617,3 +617,96 @@ def test_render_visual_media_onerror_and_safe_attributes():
     assert "Flagship Service" in html_out
 
 
+def test_render_hero_editorial_and_storefront_variants():
+    """Verify editorial showcase and storefront hero variants render correctly."""
+    # Editorial showcase
+    sec_editorial = Section(
+        id="hero-1",
+        type="hero",
+        content={
+            "title": "Bespoke Residences",
+            "subtitle": "Masterfully tailored interiors.",
+            "quote": "Design is the silent ambassador of your brand.",
+            "quote_author": "Principal Architect",
+            "pill_badge": "Private Commission",
+        },
+        style=SectionStyle(layout_variant="editorial_showcase"),
+    )
+    html_editorial = render_hero_section(sec_editorial)
+    assert "hero-editorial-showcase" in html_editorial
+    assert "editorial-main-title" in html_editorial
+    assert "Design is the silent ambassador" in html_editorial
+    assert "Principal Architect" in html_editorial
+
+    # Storefront
+    sec_storefront = Section(
+        id="hero-1",
+        type="hero",
+        content={
+            "title": "Fresh Daily Hearth Bakes",
+            "subtitle": "Naturally fermented organic sourdough.",
+            "pill_badge": "Oven Warm at 6:30 AM",
+        },
+        style=SectionStyle(layout_variant="storefront"),
+    )
+    html_storefront = render_hero_section(sec_storefront)
+    assert "hero-storefront-wrapper" in html_storefront
+    assert "storefront-strip" in html_storefront
+    assert "Fresh Daily Hearth Bakes" in html_storefront
+
+
+def test_render_image_section_gallery_layout():
+    """Verify image section gallery layout renders grid of images safely."""
+    sec_gallery = Section(
+        id="image-1",
+        type="image",
+        content={
+            "images": [
+                {"url": "https://images.unsplash.com/photo-1.jpg", "caption": "Living Lounge"},
+                {"url": "https://images.unsplash.com/photo-2.jpg", "caption": "Stone Kitchen"},
+            ],
+            "alt": "Architectural Portfolio",
+        },
+        style=SectionStyle(layout_variant="gallery"),
+    )
+    html_gallery = render_image_section(sec_gallery)
+    assert "gallery-grid-row" in html_gallery
+    assert "https://images.unsplash.com/photo-1.jpg" in html_gallery
+    assert "https://images.unsplash.com/photo-2.jpg" in html_gallery
+
+
+def test_render_navigation_variants_and_form_pulse_highlight():
+    """Verify navbar styling variations and form pulse highlight support."""
+    state_pill = WebsiteState(
+        title="Boutique Cafe",
+        version=1,
+        theme=ThemeConfig(
+            background="#FFFFFF",
+            primary_color="#D97706",
+            text_color="#1F2937",
+            nav_style="floating_pill",
+            heading_font="Playfair Display, serif",
+        ),
+        sections=[
+            Section(id="hero-1", type="hero", content={"title": "Cafe", "brand_icon": "☕"}),
+            Section(
+                id="contact-1",
+                type="contact",
+                content={
+                    "heading": "Reserve Table",
+                    "form_type": "booking",
+                    "fields": ["Guest Name", "Party Size", "Reservation Time"],
+                },
+            ),
+        ],
+    )
+    html_pill = render_website(state_pill)
+    assert "navbar-floating_pill" in html_pill
+    assert "☕" in html_pill
+    assert "Playfair Display" in html_pill
+    assert "id=\"appointment-form\"" in html_pill
+    assert "formPulseHighlight" in html_pill
+    assert "target.scrollIntoView" in html_pill
+
+
+

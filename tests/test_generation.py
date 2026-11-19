@@ -473,3 +473,330 @@ def test_generator_provider_failure_returns_fallback():
     assert isinstance(state, WebsiteState)
     assert meta["is_fallback"] is True
     assert len(state.sections) >= 4
+
+
+def test_contrasting_briefs_produce_diverse_architecture_and_styling():
+    """Verify 3 distinct business briefs produce diverse layouts, fonts, themes, and forms."""
+    from src.generator import (
+        create_luxury_interior_fallback_website,
+        create_cloud_security_fallback_website,
+        create_artisan_bakery_fallback_website,
+        create_deterministic_fallback_website,
+    )
+    from src.planner import plan_website
+
+    brief_luxury = "High-end luxury interior design studio in Manhattan for bespoke residences"
+    brief_saas = "Enterprise cloud cybersecurity and kubernetes threat detection SaaS platform"
+    brief_bakery = "Charming neighborhood artisan bakery with sourdough bakes, morning pastries, and bread subscriptions"
+
+    mock_provider = _create_mock_provider()
+    mock_provider.complete.return_value = ProviderResponse(content="", success=False)
+
+    site_luxury = create_deterministic_fallback_website(brief_luxury)
+    site_saas = create_deterministic_fallback_website(brief_saas)
+    site_bakery = create_deterministic_fallback_website(brief_bakery)
+
+    # 1. Themes & Typography Pairs must be distinctly tailored
+    assert site_luxury.theme.heading_font != site_saas.theme.heading_font
+    assert site_saas.theme.heading_font != site_bakery.theme.heading_font
+    assert "Playfair" in site_luxury.theme.heading_font
+    assert "Outfit" in site_saas.theme.heading_font
+
+    # 2. Background and Nav Styles must vary
+    assert site_luxury.theme.background_style == "editorial_cream"
+    assert site_saas.theme.background_style == "tech_dark"
+    assert site_bakery.theme.background_style == "warm_ivory"
+    assert site_bakery.theme.nav_style == "floating_pill"
+
+    # 3. Form types and fields must be domain-specific
+    contact_luxury = next(s for s in site_luxury.sections if s.type == "contact")
+    contact_saas = next(s for s in site_saas.sections if s.type == "contact")
+    contact_bakery = next(s for s in site_bakery.sections if s.type == "contact")
+
+    assert contact_luxury.content["form_type"] == "inquiry"
+    assert any("Budget" in f or "Scope" in f for f in contact_luxury.content["fields"])
+
+    assert contact_saas.content["form_type"] == "demo"
+    assert any("Work Email" in f or "Cloud" in f for f in contact_saas.content["fields"])
+
+    assert contact_bakery.content["form_type"] == "order"
+    assert any("Pickup" in f or "Items" in f for f in contact_bakery.content["fields"])
+
+    # 4. Hero layout variants must be distinct
+    hero_luxury = next(s for s in site_luxury.sections if s.type == "hero")
+    hero_saas = next(s for s in site_saas.sections if s.type == "hero")
+    hero_bakery = next(s for s in site_bakery.sections if s.type == "hero")
+
+    assert hero_luxury.style.layout_variant == "editorial_showcase"
+    assert hero_saas.style.layout_variant == "centered"
+    assert hero_bakery.style.layout_variant == "storefront"
+
+
+def test_image_service_multi_slot_retrieval():
+    """Verify retrieve_image_slots returns hero, bg, gallery, and labels for domains."""
+    from src.image_service import retrieve_image_slots
+
+    interior_slots = retrieve_image_slots("luxury interior design architecture")
+    assert interior_slots.get("hero_url") is not None
+    assert interior_slots.get("bg_url") is not None
+    assert len(interior_slots.get("gallery_urls", [])) >= 2
+    assert "Architectural" in interior_slots.get("label", "")
+
+    cyber_slots = retrieve_image_slots("cloud security saas tech")
+    assert cyber_slots.get("hero_url") is not None
+    assert "Cybersecurity" in cyber_slots.get("label", "")
+
+    bakery_slots = retrieve_image_slots("artisan sourdough bakery bread")
+    assert bakery_slots.get("hero_url") is not None
+    assert "Bakery" in bakery_slots.get("label", "")
+
+
+# -----------------------------------------------------------------------------
+# 7. Section Content Normalization & Diagnostics Regression Tests
+# -----------------------------------------------------------------------------
+
+def test_section_content_normalization_string_to_dict():
+    """Verify plain string content is normalized into valid structured dicts for all 8 section types."""
+    from src.schema import normalize_section_content, Section
+
+    # 1. Hero
+    hero_str = "Elite Boxing Studio\nHigh-intensity workouts designed to build champions."
+    hero_dict = normalize_section_content("hero", hero_str)
+    assert isinstance(hero_dict, dict)
+    assert hero_dict["title"] == "Elite Boxing Studio"
+    assert "High-intensity" in hero_dict["subtitle"]
+    assert hero_dict["cta_link"] == "#appointment-form"
+    sec_hero = Section(id="hero-1", type="hero", content=hero_str)
+    assert isinstance(sec_hero.content, dict)
+    assert sec_hero.content["title"] == "Elite Boxing Studio"
+
+    # 2. Text
+    text_str = "Our Heritage\nFounded in 1994, our studio has trained Olympic athletes."
+    text_dict = normalize_section_content("text", text_str)
+    assert isinstance(text_dict, dict)
+    assert text_dict["heading"] == "Our Heritage"
+    assert "Founded in 1994" in text_dict["body"]
+
+    # 3. Image
+    img_url_str = "https://images.unsplash.com/photo-sample.jpg"
+    img_dict = normalize_section_content("image", img_url_str)
+    assert isinstance(img_dict, dict)
+    assert img_dict["image_url"] == img_url_str
+
+    img_desc_str = "Boutique bakery with rustic sourdough loaves"
+    img_dict2 = normalize_section_content("image", img_desc_str)
+    assert img_dict2["image_description"] == img_desc_str
+    assert img_dict2["alt"] == img_desc_str[:60]
+
+    # 4. Features
+    feat_str = "1. Technical Sparring - Ring sparring with coaches\n2. Heavy Bag - Cardio conditioning"
+    feat_dict = normalize_section_content("features", feat_str)
+    assert isinstance(feat_dict, dict)
+    assert len(feat_dict["items"]) == 2
+    assert "Technical Sparring" in feat_dict["items"][0]["title"]
+    assert "Ring sparring" in feat_dict["items"][0]["description"]
+
+    # 5. Testimonials
+    testim_str = "The coaching completely transformed my stamina! - Alex Rivera"
+    testim_dict = normalize_section_content("testimonials", testim_str)
+    assert isinstance(testim_dict, dict)
+    assert len(testim_dict["items"]) >= 1
+    assert "transformed my stamina" in testim_dict["items"][0]["quote"]
+    assert testim_dict["items"][0]["author"] == "Alex Rivera"
+    assert testim_dict["items"][0]["tag"] == "Illustrative Client Feedback"
+
+    # 6. Pricing
+    pricing_str = "Basic Plan: $79\nPro Plan: $149"
+    pricing_dict = normalize_section_content("pricing", pricing_str)
+    assert isinstance(pricing_dict, dict)
+    assert len(pricing_dict["plans"]) == 2
+    assert "$79" in pricing_dict["plans"][0]["price"]
+    assert "$149" in pricing_dict["plans"][1]["price"]
+
+    # 7. CTA
+    cta_str = "Claim Your Free First Session Today!"
+    cta_dict = normalize_section_content("cta", cta_str)
+    assert isinstance(cta_dict, dict)
+    assert "Claim Your Free" in cta_dict["heading"]
+    assert cta_dict["button_link"] == "#appointment-form"
+
+    # 8. Contact
+    contact_str = "Reach us at team@pulseboxing.com or call (555) 392-1049"
+    contact_dict = normalize_section_content("contact", contact_str)
+    assert isinstance(contact_dict, dict)
+    assert contact_dict["email"] == "team@pulseboxing.com"
+    assert contact_dict["phone"] == "(555) 392-1049"
+    assert len(contact_dict["fields"]) >= 4
+
+
+def test_section_content_normalization_valid_dict_preservation():
+    """Verify that an already valid dictionary is preserved without losing custom fields."""
+    from src.schema import normalize_section_content
+
+    custom_content = {
+        "title": "Custom Title",
+        "subtitle": "Custom Subtitle",
+        "custom_key": "custom_value",
+        "cta_text": "Sign Up",
+    }
+    normalized = normalize_section_content("hero", custom_content)
+    assert normalized["title"] == "Custom Title"
+    assert normalized["subtitle"] == "Custom Subtitle"
+    assert normalized["custom_key"] == "custom_value"
+    assert normalized["cta_text"] == "Sign Up"
+
+    # List of string items in features dictionary is normalized to list of dicts
+    feat_content = {
+        "heading": "Our Services",
+        "items": ["Strength Conditioning", "Mobility Drills"],
+    }
+    norm_feat = normalize_section_content("features", feat_content)
+    assert len(norm_feat["items"]) == 2
+    assert norm_feat["items"][0]["title"] == "Strength Conditioning"
+    assert isinstance(norm_feat["items"][0], dict)
+
+
+def test_section_content_normalization_missing_and_null_content():
+    """Verify None, empty string, and empty dict gracefully produce complete valid dictionaries."""
+    from src.schema import normalize_section_content, Section
+
+    for s_type in ["hero", "text", "image", "features", "testimonials", "pricing", "cta", "contact"]:
+        norm_none = normalize_section_content(s_type, None)
+        assert isinstance(norm_none, dict)
+        sec_none = Section(id=f"{s_type}-1", type=s_type, content=None)
+        assert isinstance(sec_none.content, dict)
+
+        norm_empty_str = normalize_section_content(s_type, "")
+        assert isinstance(norm_empty_str, dict)
+        sec_str = Section(id=f"{s_type}-1", type=s_type, content="")
+        assert isinstance(sec_str.content, dict)
+
+        norm_empty_dict = normalize_section_content(s_type, {})
+        assert isinstance(norm_empty_dict, dict)
+        sec_dict = Section(id=f"{s_type}-1", type=s_type, content={})
+        assert isinstance(sec_dict.content, dict)
+
+
+def test_section_content_normalization_malformed_content():
+    """Verify numeric, boolean, and list inputs are safely normalized without throwing."""
+    from src.schema import normalize_section_content, Section
+
+    # Number
+    norm_num = normalize_section_content("text", 42)
+    assert isinstance(norm_num, dict)
+    assert "42" in norm_num["body"]
+
+    # Boolean
+    norm_bool = normalize_section_content("hero", False)
+    assert isinstance(norm_bool, dict)
+    assert "title" in norm_num or "title" in norm_bool
+
+    # List of strings for features
+    norm_list = normalize_section_content("features", ["Cardio", "Resistance", "Yoga"])
+    assert isinstance(norm_list, dict)
+    assert len(norm_list["items"]) == 3
+    assert norm_list["items"][1]["title"] == "Resistance"
+
+
+def test_generator_successful_generation_after_normalization():
+    """Verify generator validates and returns WebsiteState when LLM returns string section content."""
+    from src.generator import generate_website_json
+    from src.planner import create_deterministic_fallback_plan
+
+    mock_provider = _create_mock_provider()
+    # LLM returns JSON where hero and features have plain string content
+    raw_llm_json = json.dumps({
+        "title": "Boxing Club",
+        "version": 1,
+        "theme": {
+            "background": "#0F172A",
+            "primary_color": "#F97316",
+            "text_color": "#F8FAFC",
+            "font_family": "Inter, sans-serif",
+            "heading_font": "Inter, sans-serif",
+            "background_style": "dark_glow",
+            "nav_style": "sticky_glass",
+        },
+        "sections": [
+            {
+                "id": "hero-1",
+                "type": "hero",
+                "content": "Championship Boxing & HIIT. Train with elite world-class coaches.",
+                "style": {"alignment": "center", "layout_variant": "split"},
+            },
+            {
+                "id": "features-1",
+                "type": "features",
+                "content": "Heavy bag training; Ring sparring; Contrast hydrotherapy",
+                "style": {"alignment": "center", "layout_variant": "grid"},
+            },
+            {
+                "id": "pricing-1",
+                "type": "pricing",
+                "content": "Standard: $89\nUnlimited: $169",
+                "style": {"alignment": "center", "layout_variant": "cards"},
+            },
+            {
+                "id": "testimonials-1",
+                "type": "testimonials",
+                "content": "Great coaches and amazing workout! - Marcus V.",
+                "style": {"alignment": "center", "layout_variant": "grid"},
+            },
+            {
+                "id": "contact-1",
+                "type": "contact",
+                "content": "Email us at coach@boxingclub.com or call (555) 999-1234",
+                "style": {"alignment": "center"},
+            },
+        ],
+    })
+    mock_provider.complete.return_value = ProviderResponse(content=raw_llm_json, success=True)
+
+    plan = create_deterministic_fallback_plan("fitness")
+    state, meta = generate_website_json("fitness boxing gym", plan, provider=mock_provider)
+
+    assert isinstance(state, WebsiteState)
+    assert meta["is_fallback"] is False
+    assert len(state.sections) == 5
+
+    # Check that string contents were normalized into dicts
+    hero_sec = state.sections[0]
+    assert isinstance(hero_sec.content, dict)
+    assert "Championship Boxing" in hero_sec.content["title"]
+    assert hero_sec.content["cta_link"] == "#appointment-form"
+
+    features_sec = state.sections[1]
+    assert isinstance(features_sec.content, dict)
+    assert len(features_sec.content["items"]) >= 2
+
+    contact_sec = state.sections[4]
+    assert isinstance(contact_sec.content, dict)
+    assert contact_sec.content["email"] == "coach@boxingclub.com"
+
+
+def test_diagnostics_rendering_with_absent_optional_plan_fields():
+    """Verify that WebsitePlan with missing/legacy/optional fields does not crash or raise AttributeError."""
+    from src.schema import WebsitePlan
+
+    # 1. Plan constructed with legacy tone and font_family
+    plan_dict = {
+        "business_type": "Fitness Studio",
+        "tone": "Energetic and powerful",
+        "font_family": "Roboto, sans-serif",
+        "primary_goal": "Book free passes",
+        "planned_sections": ["hero", "pricing", "contact"],
+    }
+    plan = WebsitePlan.model_validate(plan_dict)
+    assert plan.tone == "Energetic and powerful"
+    assert plan.tone_and_style == "Energetic and powerful"
+    assert plan.font_family == "Roboto, sans-serif"
+    assert plan.typography == "Roboto, sans-serif"
+
+    # 2. Verify safe attribute access patterns used in app.py
+    assert getattr(plan, "tone", None) == "Energetic and powerful"
+    assert getattr(plan, "tone_and_style", None) == "Energetic and powerful"
+    assert getattr(plan, "typography", None) == "Roboto, sans-serif"
+    assert getattr(plan, "font_family", None) == "Roboto, sans-serif"
+    assert getattr(plan, "non_existent_field", "fallback") == "fallback"
+
+

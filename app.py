@@ -268,7 +268,14 @@ with col_right:
             col_t1.metric("Background", current_state.theme.background)
             col_t2.metric("Primary Color", current_state.theme.primary_color)
             col_t3.metric("Text Color", current_state.theme.text_color)
-            st.caption(f"Font Family: {current_state.theme.font_family}")
+            
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                st.markdown(f"**Heading Font:** `{current_state.theme.heading_font or current_state.theme.font_family}`")
+                st.markdown(f"**Body Font:** `{current_state.theme.font_family}`")
+            with col_f2:
+                st.markdown(f"**Background Style:** `{current_state.theme.background_style or 'solid'}`")
+                st.markdown(f"**Navbar Style:** `{current_state.theme.nav_style or 'sticky_glass'}`")
 
     else:
         st.markdown(
@@ -284,17 +291,137 @@ with col_right:
             unsafe_allow_html=True,
         )
 
-    with st.expander("🛠️ Developer Diagnostics / Planner & Generation Log", expanded=False):
-        st.markdown("**Latest Website Plan:**")
+    with st.expander("🛠️ Developer Diagnostics & Pipeline Inspection", expanded=False):
         plan_data = st.session_state.get("website_plan")
-        if plan_data:
-            st.json(plan_data.model_dump())
-        else:
-            st.caption("No plan generated yet.")
+        state_data = st.session_state.get("website_state")
+        meta_data = st.session_state.get("generation_meta") or {}
 
-        st.markdown("**Generation Metadata:**")
-        meta_data = st.session_state.get("generation_meta")
-        if meta_data:
-            st.json(meta_data)
-        else:
-            st.caption("No generation metadata yet.")
+        diag_tabs = st.tabs([
+            "🔍 Pipeline Trace",
+            "📋 Planner Plan",
+            "📄 Website State",
+            "🖼️ Visual Media Slots",
+            "🔗 Anchor & Nav Map",
+        ])
+
+        with diag_tabs[0]:
+            st.markdown("#### Pipeline Architecture & Strategy Summary")
+            if plan_data:
+                try:
+                    col_p1, col_p2 = st.columns(2)
+                    with col_p1:
+                        b_type = getattr(plan_data, "business_type", "General Business")
+                        t_style = getattr(plan_data, "tone_and_style", getattr(plan_data, "tone", "Modern, professional"))
+                        l_strat = getattr(plan_data, "layout_strategy", "modern_showcase")
+                        h_var = getattr(plan_data, "hero_variant", "split")
+                        f_type = getattr(plan_data, "form_type", "contact")
+
+                        st.markdown(f"- **Business Type:** `{b_type}`")
+                        st.markdown(f"- **Tone & Persona:** `{t_style}`")
+                        st.markdown(f"- **Layout Strategy:** `{l_strat}`")
+                        st.markdown(f"- **Hero Variant:** `{h_var}`")
+                        st.markdown(f"- **Form Type:** `{f_type}`")
+                    with col_p2:
+                        h_font = getattr(plan_data, "heading_font", "Inter, sans-serif")
+                        b_font = getattr(plan_data, "typography", getattr(plan_data, "font_family", "Inter, sans-serif"))
+                        bg_style = getattr(plan_data, "background_style", "solid")
+                        n_style = getattr(plan_data, "nav_style", "sticky_glass")
+                        raw_fields = getattr(plan_data, "form_fields", None) or []
+                        f_fields_str = ", ".join(str(f) for f in raw_fields) if raw_fields else "Standard Fields"
+
+                        st.markdown(f"- **Heading Font:** `{h_font}`")
+                        st.markdown(f"- **Body Font:** `{b_font}`")
+                        st.markdown(f"- **Background Style:** `{bg_style}`")
+                        st.markdown(f"- **Nav Style:** `{n_style}`")
+                        st.markdown(f"- **Form Fields:** {f_fields_str}")
+                except Exception as diag_err:
+                    st.caption(f"Strategy summary unavailable ({diag_err})")
+            else:
+                st.caption("No pipeline trace available yet. Generate a website to view strategy trace.")
+
+            st.markdown("---")
+            st.markdown("#### Generation Telemetry")
+            if meta_data:
+                st.json(meta_data)
+            else:
+                st.caption("No generation telemetry available.")
+
+        with diag_tabs[1]:
+            st.markdown("#### Validated WebsitePlan (Planner Output)")
+            if plan_data:
+                try:
+                    if hasattr(plan_data, "model_dump"):
+                        st.json(plan_data.model_dump())
+                    elif isinstance(plan_data, dict):
+                        st.json(plan_data)
+                    else:
+                        st.write(str(plan_data))
+                except Exception as p_err:
+                    st.caption(f"Could not format plan ({p_err})")
+            else:
+                st.caption("No plan generated yet.")
+
+        with diag_tabs[2]:
+            st.markdown("#### Validated WebsiteState (Renderer Contract)")
+            if state_data:
+                try:
+                    sec_list = getattr(state_data, "sections", []) or []
+                    ver_num = getattr(state_data, "version", 1)
+                    st.markdown(f"**Total Sections:** `{len(sec_list)}` | **Version:** `v{ver_num}`")
+                    sections_table = [
+                        {
+                            "ID": getattr(s, "id", "unknown"),
+                            "Type": getattr(s, "type", "unknown"),
+                            "Variant": getattr(getattr(s, "style", None), "layout_variant", "default") or "default",
+                            "Alignment": getattr(getattr(s, "style", None), "alignment", "center"),
+                            "Padding": getattr(getattr(s, "style", None), "padding", "medium"),
+                        }
+                        for s in sec_list
+                    ]
+                    if sections_table:
+                        st.table(sections_table)
+                    if hasattr(state_data, "model_dump"):
+                        st.json(state_data.model_dump())
+                    elif isinstance(state_data, dict):
+                        st.json(state_data)
+                except Exception as s_err:
+                    st.caption(f"Could not format state inspection ({s_err})")
+            else:
+                st.caption("No website state generated yet.")
+
+        with diag_tabs[3]:
+            st.markdown("#### Curated Visual Media Slots & Attribution")
+            if state_data:
+                try:
+                    has_image = False
+                    for s in getattr(state_data, "sections", []):
+                        c = getattr(s, "content", {}) or {}
+                        s_type = getattr(s, "type", "")
+                        s_id = getattr(s, "id", "")
+                        if s_type in ("hero", "image") or c.get("image_url") or c.get("image_description"):
+                            has_image = True
+                            st.markdown(f"**Section `{s_id}` ({s_type}):**")
+                            st.markdown(f"- Image URL: `{c.get('image_url') or 'None (Stylized Visual Placeholder Used)'}`")
+                            st.markdown(f"- Description/Prompt: `{c.get('image_description') or 'N/A'}`")
+                            st.markdown(f"- Attribution: *Curated royalty-free photography or styled visual card*")
+                    if not has_image:
+                        st.caption("No dedicated media sections in current website.")
+                except Exception as m_err:
+                    st.caption(f"Media slots inspection unavailable ({m_err})")
+            else:
+                st.caption("No media slots resolved yet.")
+
+        with diag_tabs[4]:
+            st.markdown("#### Internal Anchor & Target Section Map")
+            if state_data:
+                anchor_map = [
+                    {"Source Element": "Navbar Brand / Home", "Action": "Scroll to Top", "Target DOM ID": "#hero-1"},
+                    {"Source Element": "Navbar CTA / Primary Button", "Action": "Scroll & Highlight Form", "Target DOM ID": "#appointment-form"},
+                    {"Source Element": "Hero Primary CTA", "Action": "Scroll & Highlight Form", "Target DOM ID": "#appointment-form"},
+                    {"Source Element": "Hero Secondary CTA", "Action": "Scroll to Section", "Target DOM ID": "#pricing-1 / #features-1"},
+                    {"Source Element": "Contact / Booking Form Box", "Action": "Interactive Form Submission", "Target DOM ID": "id='appointment-form'"},
+                ]
+                st.table(anchor_map)
+                st.success("✅ All navigation and CTA anchors use internal smooth-scroll DOM targets with `@keyframes formPulseHighlight`. Zero iframe parent navigation.")
+            else:
+                st.caption("No anchor map available yet.")

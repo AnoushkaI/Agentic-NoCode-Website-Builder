@@ -373,3 +373,46 @@ The system uses structured Pydantic schemas as the contract between AI modules a
 - **Phase 6: End-to-End Tests, Failure Analysis & Demo Verification**
   - Extended multi-turn edge-case testing and performance profiling.
   - Final video/demo recording scripts and verification checklists.
+
+---
+
+## 16. Engineering Retrospective: Incomplete Items, Technical Debt & Roadmap Rectifications
+
+### 16.1 Incomplete Items & Deferred Features
+
+| Feature / Area | Current State in Solution | Known Limitation | How to Rectify with Additional Time |
+| :--- | :--- | :--- | :--- |
+| **Backend Form Handling & Lead Storage** | Interactive client-side validation, smooth scroll focus (`#appointment-form`), and `@keyframes formPulseHighlight`. | Forms do not persist submissions to a persistent database or trigger email/webhook notifications. | 1. Implement a lightweight SQLite table (`LeadSubmission`) in `src/leads.py`.<br>2. Add a backend POST endpoint `/api/submit` to `src/preview_server.py`.<br>3. Add a **"📥 Captured Leads"** tab in Streamlit showing an inbox of leads with CSV export.<br>4. Integrate webhook forwarding (e.g. Zapier / Slack / Resend API). |
+| **Persistent Workspace & Session Storage** | State and version snapshots are stored in Streamlit's `st.session_state` (in-memory per tab session). Manual JSON export is supported. | Page refreshes or server restarts reset current state unless the user downloaded their state JSON. | 1. Introduce SQLite or file-backed session persistence (`projects/{project_id}.json`).<br>2. Implement auto-save on every committed version bump ($v_1 \to v_2$).<br>3. Add a **"📂 Load Saved Project"** sidebar selector allowing users to resume past projects across sessions. |
+| **Multi-Page Website Support** | Generates full responsive single-page landing pages with internal anchor navigation (`#hero-1`, `#pricing-1`, `#appointment-form`). | Multi-page routing (`/about`, `/pricing`, `/contact`, `/services`) is not yet supported. | 1. Extend schema from `WebsiteState.sections: List[Section]` to `WebsiteState.pages: List[Page]` where each page defines its own route, SEO title, and sections.<br>2. Update renderer to generate multi-file HTML packages or dynamic client-side router.<br>3. Update `preview_server.py` to route multi-page URLs. |
+| **AI Image Generation & Asset Upload** | Curated Unsplash photography mapped by business taxonomy + stylized CSS/SVG placeholder cards with `onerror` fallbacks. | Does not dynamically synthesize custom AI illustrations or allow users to upload proprietary business images. | 1. Add `st.file_uploader` in Streamlit for users to upload their own logo and section photography.<br>2. Integrate text-to-image API (e.g. Gemini Imagen / Stable Diffusion XL via NIM) using `image_description` prompts from the AI planner.<br>3. Store uploaded assets in a local `static/uploads/` directory served by `preview_server.py`. |
+| **Token Streaming & Progressive UI Rendering** | Synchronous blocking LLM completion (`provider.complete()`) with animated status containers (`st.status`). | Generation latency takes 3–7 seconds of waiting before full website state is presented. | 1. Switch to provider streaming API (`client.chat.completions.create(stream=True)`).<br>2. Use incremental partial-JSON parsing (`jiter` or stream lexer) to extract completed sections as they arrive.<br>3. Render skeleton UI placeholders in Streamlit, popping in sections progressively. |
+| **1-Click Cloud Deployment** | Manual export via **"🌐 Download Standalone HTML"** and **"📥 Download State JSON"**. | Users must manually host the exported HTML file on Netlify, Vercel, or GitHub Pages. | 1. Add direct API integration with Netlify / Vercel / GitHub Pages REST APIs.<br>2. Add a **"🚀 Deploy to Web"** button prompting for a personal access token or OAuth hook.<br>3. Return a live public production URL (`https://sitepilot-project-xyz.netlify.app`). |
+| **Automated Visual Regression Testing** | 105 automated pytest tests verifying schema contracts, HTML string output, and WCAG contrast calculations. | Does not perform automated headless browser pixel-diffing across mobile/desktop viewports. | 1. Add Playwright / Puppeteer test harness in `tests/visual_regression/`.<br>2. Take baseline viewport screenshots (375px mobile, 768px tablet, 1440px desktop).<br>3. Perform automated pixel-by-pixel diffing on commits to guarantee zero visual collisions or CSS overflow. |
+
+---
+
+### 16.2 Architectural Shortcuts & Rectification Plan
+
+#### 1. Monolithic HTML/CSS Renderer (`src/renderer.py`)
+- **Current Shortcut:** `src/renderer.py` contains ~700 lines of Python code combining HTML string formatting, CSS layout rules, and sanitization logic.
+- **Why it was built this way:** Rapid zero-dependency prototyping, guaranteed single-file distributable output, and avoiding third-party template engine setup during early phases.
+- **How to Rectify:**
+  - Decouple Python logic from markup by adopting **Jinja2** templates (`templates/components/hero.html`, `templates/components/pricing.html`).
+  - Extract CSS into modular stylesheets (`styles/base.css`, `styles/layouts.css`, `styles/components.css`) compiled or concatenated at render time.
+  - Improves maintainability and allows frontend designers to modify HTML/CSS without touching Python logic.
+
+#### 2. Regex-Based Conversational Fallback Parser (`src/editor.py`)
+- **Current Shortcut:** In offline mode or when provider connectivity fails, `_create_deterministic_fallback_edit_plan` uses regular expressions to parse edit requests (colors, CTA buttons, alignment, FAQ addition, dark mode).
+- **Why it was built this way:** Provided instant, zero-latency, deterministic execution for common edits without requiring local GPU weights or network connectivity.
+- **How to Rectify:**
+  - Replace naive regex with a small local intent-classification grammar or embedding-based semantic router (e.g. small ONNX model or typed command DSL).
+  - Implement an operation dependency resolver to detect and reject conflicting compound instructions (e.g. *"remove pricing but make pricing cards green"*).
+
+#### 3. Global In-Memory Preview Daemon (`src/preview_server.py`)
+- **Current Shortcut:** Uses module-level state (`_LATEST_HTML`) protected by `threading.Lock()` to serve preview requests.
+- **Why it was built this way:** Kept preview serving self-contained within Python's standard library (`http.server`) without bringing in FastAPI/Uvicorn or setting up external servers.
+- **How to Rectify:**
+  - Migrate to an ASGI architecture (e.g. Starlette) or serve from temporary disk files keyed by session ID (`/preview/{session_id}`).
+  - Enables isolated, concurrent preview serving across multiple simultaneous users without lock contention.
+
